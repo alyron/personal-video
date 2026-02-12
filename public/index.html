@@ -73,12 +73,16 @@
             </div>
         </div>
 
-        <div class="video-list" id="videoList">
-            <div class="loading">
-                <div class="loading-spinner"></div>
-                <p>加载中...</p>
+        <div class="video-list-wrapper">
+            <div class="video-list" id="videoList">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>加载中...</p>
+                </div>
             </div>
+            <div class="quick-nav" id="quickNav" style="display: none;"></div>
         </div>
+        <div class="quick-nav-tooltip" id="quickNavTooltip"></div>
     </main>
 
     <script src="/js/app.js"></script>
@@ -127,6 +131,10 @@
         // 加载收藏列表
         async function loadFavorites() {
             const videoList = document.getElementById('videoList');
+            const quickNav = document.getElementById('quickNav');
+            
+            // 隐藏快速导航
+            quickNav.style.display = 'none';
             
             try {
                 const response = await api('/api/favorites');
@@ -180,6 +188,7 @@
         // 渲染视频列表
         function renderVideoList(videos) {
             const videoList = document.getElementById('videoList');
+            const quickNav = document.getElementById('quickNav');
             
             if (videos.length === 0) {
                 videoList.innerHTML = `
@@ -188,6 +197,7 @@
                         <p>点击"刷新扫描"按钮扫描视频目录</p>
                     </div>
                 `;
+                quickNav.style.display = 'none';
                 return;
             }
             
@@ -203,10 +213,15 @@
             // 获取收藏的视频ID列表
             const favoriteIds = new Set(favorites.map(f => f.videoId));
             
+            // 目录名称列表（用于快速导航）
+            const dirNames = Object.keys(grouped);
+            
             let html = '';
             for (const [dirName, vids] of Object.entries(grouped)) {
+                // 添加 id 以便快速导航定位
+                const dirId = 'dir-' + dirName.replace(/[^a-zA-Z0-9]/g, '_');
                 html += `
-                    <div class="video-group">
+                    <div class="video-group" id="${dirId}">
                         <div class="group-header" onclick="toggleGroup(this)">
                             <span class="group-name">📁 ${dirName}</span>
                             <span class="group-count">${vids.length} 个视频</span>
@@ -232,6 +247,142 @@
             }
             
             videoList.innerHTML = html;
+            
+            // 生成快速导航滑块
+            renderQuickNav(dirNames);
+        }
+        
+        // 渲染快速导航滑块
+        function renderQuickNav(dirNames) {
+            const quickNav = document.getElementById('quickNav');
+            const tooltip = document.getElementById('quickNavTooltip');
+            
+            // 存储目录名称供拖动使用
+            window._quickNavDirNames = dirNames;
+            
+            if (dirNames.length <= 3) {
+                quickNav.style.display = 'none';
+                return;
+            }
+            
+            quickNav.style.display = 'flex';
+            quickNav.innerHTML = '';
+            
+            dirNames.forEach((dirName, index) => {
+                const item = document.createElement('div');
+                item.className = 'quick-nav-item';
+                
+                // 显示目录名首字符或简称
+                const shortName = dirName.length <= 2 ? dirName : dirName.substring(0, 2);
+                item.textContent = shortName;
+                item.title = dirName;
+                item.dataset.index = index;
+                item.dataset.dirName = dirName;
+                
+                // 点击跳转
+                item.addEventListener('click', () => {
+                    const dirId = 'dir-' + dirName.replace(/[^a-zA-Z0-9]/g, '_');
+                    const target = document.getElementById(dirId);
+                    if (target) {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        updateActiveNav(index);
+                    }
+                });
+                
+                quickNav.appendChild(item);
+            });
+            
+            // 设置拖动支持
+            setupQuickNavDrag(quickNav, tooltip, dirNames);
+            
+            // 滚动监听，更新当前高亮
+            setupScrollObserver();
+        }
+        
+        // 设置快速导航拖动
+        function setupQuickNavDrag(quickNav, tooltip, dirNames) {
+            let isDragging = false;
+            
+            const handleDrag = (e) => {
+                if (!isDragging) return;
+                
+                e.preventDefault();
+                
+                const rect = quickNav.getBoundingClientRect();
+                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                const relativeY = clientY - rect.top;
+                const percentage = Math.max(0, Math.min(1, relativeY / rect.height));
+                const index = Math.floor(percentage * dirNames.length);
+                const clampedIndex = Math.min(index, dirNames.length - 1);
+                
+                const dirName = dirNames[clampedIndex];
+                const dirId = 'dir-' + dirName.replace(/[^a-zA-Z0-9]/g, '_');
+                const target = document.getElementById(dirId);
+                
+                // 显示提示
+                tooltip.textContent = dirName;
+                tooltip.style.top = (rect.top + relativeY) + 'px';
+                tooltip.classList.add('show');
+                
+                // 滚动到目标
+                if (target) {
+                    target.scrollIntoView({ behavior: 'auto', block: 'start' });
+                    updateActiveNav(clampedIndex);
+                }
+            };
+            
+            const startDrag = (e) => {
+                isDragging = true;
+                document.body.style.userSelect = 'none';
+                handleDrag(e);
+            };
+            
+            const endDrag = () => {
+                isDragging = false;
+                document.body.style.userSelect = '';
+                tooltip.classList.remove('show');
+            };
+            
+            quickNav.addEventListener('mousedown', startDrag);
+            quickNav.addEventListener('touchstart', startDrag, { passive: false });
+            
+            document.addEventListener('mousemove', handleDrag);
+            document.addEventListener('touchmove', handleDrag, { passive: false });
+            
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchend', endDrag);
+        }
+        
+        // 更新导航高亮
+        function updateActiveNav(activeIndex) {
+            const items = document.querySelectorAll('.quick-nav-item');
+            items.forEach((item, i) => {
+                item.classList.toggle('active', i === activeIndex);
+            });
+        }
+        
+        // 设置滚动监听
+        function setupScrollObserver() {
+            const groups = document.querySelectorAll('.video-group');
+            const quickNav = document.getElementById('quickNav');
+            
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const dirName = entry.target.id.replace('dir-', '').replace(/_/g, ' ');
+                        const items = document.querySelectorAll('.quick-nav-item');
+                        items.forEach(item => {
+                            const itemDirId = 'dir-' + item.dataset.dirName.replace(/[^a-zA-Z0-9]/g, '_');
+                            item.classList.toggle('active', itemDirId === entry.target.id);
+                        });
+                    }
+                });
+            }, {
+                rootMargin: '-80px 0px -70% 0px',
+                threshold: 0
+            });
+            
+            groups.forEach(group => observer.observe(group));
         }
 
         // 加载视频列表
