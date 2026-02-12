@@ -68,17 +68,17 @@ router.get('/video-info', requireAuth, (req, res) => {
 });
 
 /**
- * 视频流 (不需要认证，videoId 已加密)
+ * 视频流 (需要认证)
  */
-router.get('/stream/:videoId', (req, res) => {
+router.get('/stream/:videoId', requireAuth, (req, res) => {
   const { videoId } = req.params;
   videoStream.streamVideo(req, res, videoId);
 });
 
 /**
- * 视频下载 (不需要认证，videoId 已加密)
+ * 视频下载 (需要认证)
  */
-router.get('/download/:videoId', (req, res) => {
+router.get('/download/:videoId', requireAuth, (req, res) => {
   const { videoId } = req.params;
   videoStream.downloadVideo(res, videoId);
 });

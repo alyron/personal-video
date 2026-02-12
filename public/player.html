@@ -447,21 +447,41 @@
         }
 
         // 下载视频 - 直接使用浏览器原生下载，避免大文件内存溢出
-        function downloadVideo() {
+        async function downloadVideo() {
             if (!currentVideoId) return;
             
             const progress = document.getElementById('downloadProgress');
-            progress.textContent = '已开始下载，请查看浏览器下载管理器';
             
-            // 使用 window.location 直接跳转到下载链接
-            // 浏览器会因为 Content-Disposition: attachment 而触发下载而非导航
-            const downloadUrl = `/api/download/${currentVideoId}`;
-            window.location.href = downloadUrl;
-            
-            // 5秒后清除提示
-            setTimeout(() => {
-                progress.textContent = '';
-            }, 5000);
+            try {
+                // 先检查登录状态
+                const checkRes = await fetch('/api/videos', { method: 'HEAD' });
+                if (checkRes.status === 401) {
+                    alert('登录已过期，请重新登录');
+                    window.location.href = '/login.html';
+                    return;
+                }
+                
+                progress.textContent = '已开始下载，请查看浏览器下载管理器';
+                
+                // 使用隐藏 iframe 进行下载，避免页面导航
+                const downloadUrl = `/api/download/${currentVideoId}`;
+                let iframe = document.getElementById('downloadIframe');
+                if (!iframe) {
+                    iframe = document.createElement('iframe');
+                    iframe.id = 'downloadIframe';
+                    iframe.style.display = 'none';
+                    document.body.appendChild(iframe);
+                }
+                iframe.src = downloadUrl;
+                
+                // 10秒后清除提示
+                setTimeout(() => {
+                    progress.textContent = '';
+                }, 10000);
+            } catch (err) {
+                console.error('下载失败:', err);
+                progress.textContent = '下载失败，请重试';
+            }
         }
 
         function formatSize(bytes) {
