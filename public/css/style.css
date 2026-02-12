@@ -383,15 +383,14 @@ body {
 .player-container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 15px;
 }
 
 .player-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
-    padding: 20px;
+    padding: 12px 15px;
     background: white;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -399,27 +398,38 @@ body {
 
 .player-header-content {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .dir-badge {
     display: inline-block;
-    padding: 4px 10px;
+    padding: 3px 8px;
     background-color: #4CAF50;
     color: white;
     border-radius: 4px;
     font-size: 12px;
-    margin-bottom: 8px;
+    margin-bottom: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 .video-title {
-    font-size: 24px;
+    font-size: 18px;
     color: #333;
     margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .back-btn {
-    display: inline-block;
-    padding: 10px 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
     background-color: #2196F3;
     color: white;
     border: none;
@@ -428,10 +438,16 @@ body {
     text-decoration: none;
     font-size: 14px;
     transition: background-color 0.3s;
+    flex-shrink: 0;
+    margin-left: 15px;
 }
 
 .back-btn:hover {
     background-color: #0b7dda;
+}
+
+.player-body {
+    margin-top: 15px;
 }
 
 .video-wrapper {
@@ -439,12 +455,39 @@ body {
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    --plyr-color-main: #667eea;
+    max-height: calc(100vh - 200px);
 }
 
 .video-wrapper video {
+    max-width: 100%;
+    max-height: calc(100vh - 200px);
     width: 100%;
+    height: auto;
+    object-fit: contain;
     display: block;
     outline: none;
+}
+
+/* Plyr 播放器适配 */
+.video-wrapper .plyr {
+    max-height: calc(100vh - 200px);
+}
+
+/* 全屏模式下移除高度限制 */
+.plyr--fullscreen-active,
+.plyr--fullscreen-active video,
+.plyr--fullscreen-active .plyr__video-wrapper {
+    max-height: none !important;
+    height: 100% !important;
+}
+
+.player-actions {
+    margin-top: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 /* ===== DPlayer 修复 ===== */
@@ -516,34 +559,81 @@ body {
         gap: 10px;
         padding: 15px;
     }
-    
+
     .header-info {
         flex-wrap: wrap;
         justify-content: center;
     }
-    
+
     .stats-bar {
         flex-direction: column;
     }
-    
+
     .video-item {
         flex-direction: column;
         align-items: flex-start;
         gap: 10px;
     }
-    
+
     .watch-btn {
         width: 100%;
         text-align: center;
     }
-    
-    .player-header {
-        flex-direction: column;
-        gap: 15px;
+
+    /* 播放器页面移动端适配 */
+    .player-container {
+        padding: 10px;
     }
-    
+
+    .player-header {
+        padding: 10px 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .player-header-content {
+        flex: 1;
+        min-width: 0;
+    }
+
     .back-btn {
-        width: 100%;
-        text-align: center;
+        margin-left: 0;
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+
+    .dir-badge {
+        font-size: 11px;
+        padding: 2px 6px;
+        margin-bottom: 3px;
+    }
+
+    .video-title {
+        font-size: 14px;
+        line-height: 1.3;
+    }
+
+    .video-wrapper {
+        max-height: calc(100vh - 160px);
+    }
+
+    .video-wrapper video {
+        max-height: calc(100vh - 160px);
+    }
+
+    .video-wrapper .plyr {
+        max-height: calc(100vh - 160px);
+    }
+
+    /* 全屏模式下移除高度限制 */
+    .plyr--fullscreen-active,
+    .plyr--fullscreen-active video,
+    .plyr--fullscreen-active .plyr__video-wrapper {
+        max-height: none !important;
+        height: 100% !important;
+    }
+
+    .player-actions {
+        gap: 8px;
     }
 }
