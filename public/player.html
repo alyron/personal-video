@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>视频播放 - 视频服务器</title>
     <link rel="stylesheet" href="/css/style.css">
+    <!-- Plyr 样式 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css">
     <style>
         .player-actions {
             display: flex;
@@ -57,6 +59,27 @@
             color: #666;
             margin-left: 10px;
         }
+        .video-wrapper {
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --plyr-color-main: #667eea;
+        }
+        .video-wrapper video {
+            width: 100%;
+            display: block;
+        }
+        .format-tip {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            color: #856404;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -69,8 +92,14 @@
             <a href="/" class="back-btn">← 返回列表</a>
         </div>
 
+        <div class="format-tip" id="formatTip">
+            <strong>提示：</strong>当前视频格式可能在浏览器中播放受限。如果无法播放，建议下载后使用本地播放器观看。
+        </div>
+
         <div class="video-wrapper">
-            <video id="videoPlayer" controls preload="metadata"></video>
+            <video id="videoPlayer" controls crossorigin playsinline>
+                您的浏览器不支持视频播放
+            </video>
         </div>
 
         <div class="player-actions">
@@ -84,11 +113,16 @@
         </div>
     </div>
 
+    <!-- Plyr 脚本 -->
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js"></script>
+
     <script>
         let currentVideoId = null;
         let currentFilename = null;
         let currentDirName = null;
+        let currentContentType = null;
         let isFavorite = false;
+        let player = null;
 
         // 统一 API 请求处理
         async function api(url, options = {}) {
@@ -145,7 +179,6 @@
             
             try {
                 if (isFavorite) {
-                    // 取消收藏
                     const response = await api(`/api/favorite/${currentVideoId}`, {
                         method: 'DELETE'
                     });
@@ -155,7 +188,6 @@
                         updateFavoriteUI();
                     }
                 } else {
-                    // 添加收藏
                     const response = await api('/api/favorite', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -254,13 +286,52 @@
             return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
         }
 
+        // 初始化播放器
+        function initPlayer(videoUrl) {
+            const video = document.getElementById('videoPlayer');
+            video.src = videoUrl;
+
+            // 对于 MKV/AVI 等格式，显示提示
+            const limitedFormats = ['video/x-matroska', 'video/x-msvideo'];
+            if (limitedFormats.includes(currentContentType)) {
+                document.getElementById('formatTip').style.display = 'block';
+            }
+
+            // 初始化 Plyr
+            player = new Plyr(video, {
+                controls: [
+                    'play-large',
+                    'rewind',
+                    'play',
+                    'fast-forward',
+                    'progress',
+                    'current-time',
+                    'duration',
+                    'mute',
+                    'volume',
+                    'settings',
+                    'fullscreen'
+                ],
+                settings: ['speed'],
+                speed: { 
+                    selected: 1, 
+                    options: [0.5, 0.75, 1, 1.25, 1.5, 2] 
+                },
+                autoplay: true,
+                volume: 0.7
+            });
+
+            player.on('error', (e) => {
+                console.error('播放错误:', e);
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', async () => {
             const urlParams = new URLSearchParams(window.location.search);
             const videoId = urlParams.get('id');
             
             const dirBadge = document.getElementById('dirBadge');
             const videoTitle = document.getElementById('videoTitle');
-            const videoPlayer = document.getElementById('videoPlayer');
             const downloadBtn = document.getElementById('downloadBtn');
             const favoriteBtn = document.getElementById('favoriteBtn');
             
@@ -288,9 +359,12 @@
                 
                 dirBadge.textContent = `📁 ${info.dirName}`;
                 videoTitle.textContent = info.filename;
-                videoPlayer.src = `/api/stream/${videoId}`;
                 currentFilename = info.filename;
                 currentDirName = info.dirName;
+                currentContentType = info.contentType;
+                
+                // 初始化播放器
+                initPlayer(`/api/stream/${videoId}`);
                 
                 // 检查收藏状态
                 await checkFavorite();
