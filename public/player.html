@@ -22,6 +22,21 @@
     </div>
 
     <script>
+        // 统一 API 请求处理
+        async function api(url, options = {}) {
+            const response = await fetch(url, { 
+                ...options,
+                credentials: 'same-origin'
+            });
+            
+            if (response.status === 401) {
+                window.location.href = '/login.html';
+                throw new Error('未登录');
+            }
+            
+            return response;
+        }
+
         document.addEventListener('DOMContentLoaded', async () => {
             // 从 URL 获取视频 ID
             const urlParams = new URLSearchParams(window.location.search);
@@ -38,7 +53,7 @@
             }
             
             try {
-                const response = await fetch(`/api/video-info?id=${videoId}`);
+                const response = await api(`/api/video-info?id=${videoId}`);
                 
                 if (!response.ok) {
                     throw new Error('获取视频信息失败');

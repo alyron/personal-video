@@ -14,9 +14,9 @@ function requireAuth(req, res, next) {
   const session = sessionManager.getSession(sessionId);
   
   if (!session) {
-    // API请求返回JSON，页面请求重定向
-    if (req.xhr || req.headers.accept?.includes('application/json')) {
-      return res.status(401).json({ error: '未授权' });
+    // API 请求 (/api/*) 返回 JSON，页面请求重定向
+    if (req.originalUrl.startsWith('/api')) {
+      return res.status(401).json({ error: '未授权', needLogin: true });
     }
     return res.redirect('/login');
   }

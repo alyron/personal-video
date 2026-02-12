@@ -41,19 +41,30 @@
 
     <script src="/js/app.js"></script>
     <script>
+        // 统一 API 请求处理
+        async function api(url, options = {}) {
+            const response = await fetch(url, { 
+                ...options,
+                credentials: 'same-origin'  // 确保携带 Cookie
+            });
+            
+            if (response.status === 401) {
+                window.location.href = '/login.html';
+                throw new Error('未登录');
+            }
+            
+            return response;
+        }
+
         // 页面初始化
         document.addEventListener('DOMContentLoaded', async () => {
             // 获取当前用户信息
             try {
-                const userRes = await fetch('/api/user');
-                if (userRes.status === 401) {
-                    window.location.href = '/login.html';
-                    return;
-                }
+                const userRes = await api('/api/user');
+                if (!userRes.ok) throw new Error('获取用户信息失败');
                 const userData = await userRes.json();
                 document.getElementById('userBadge').textContent = `👤 ${userData.username}`;
             } catch (err) {
-                window.location.href = '/login.html';
                 return;
             }
 
@@ -69,7 +80,7 @@
             const videoList = document.getElementById('videoList');
             
             try {
-                const response = await fetch('/api/videos');
+                const response = await api('/api/videos');
                 const data = await response.json();
                 
                 // 更新统计
@@ -141,7 +152,7 @@
             this.textContent = '扫描中...';
             
             try {
-                const response = await fetch('/api/scan', { method: 'POST' });
+                const response = await api('/api/scan', { method: 'POST' });
                 const result = await response.json();
                 
                 if (result.success) {
@@ -150,7 +161,9 @@
                     alert('扫描失败: ' + result.error);
                 }
             } catch (err) {
-                alert('请求失败: ' + err.message);
+                if (err.message !== '未登录') {
+                    alert('请求失败: ' + err.message);
+                }
             } finally {
                 this.disabled = false;
                 this.textContent = '刷新扫描';
