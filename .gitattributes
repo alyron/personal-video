@@ -1,0 +1,13 @@
+# Auto detect text files and normalize to LF
+* text=auto
+
+# JS/HTML/CSS/JSON/MD always use LF
+*.js text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+
+# BAT files need CRLF for Windows
+*.bat text eol=crlf
