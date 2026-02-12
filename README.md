@@ -56,6 +56,8 @@ npm install
 
 **方式一：使用项目提供的脚本（自签名证书）**
 
+证书会自动生成到 `data/` 目录中：
+
 ```bash
 # Linux/macOS
 chmod +x generate-cert.sh
@@ -64,6 +66,10 @@ chmod +x generate-cert.sh
 # Windows
 generate-cert.bat
 ```
+
+生成的文件：
+- `data/key.pem` - SSL 私钥
+- `data/cert.pem` - SSL 证书
 
 **方式二：使用 Let's Encrypt（推荐，有域名时）**
 

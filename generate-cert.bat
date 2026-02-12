@@ -4,9 +4,15 @@ chcp 65001 >nul
 echo 正在生成自签名SSL证书...
 echo.
 
+REM 确保 data 目录存在
+if not exist data (
+    mkdir data
+    echo 已创建 data 目录
+)
+
 REM 检查是否已存在证书文件
-if exist key.pem (
-    if exist cert.pem (
+if exist data\key.pem (
+    if exist data\cert.pem (
         set /p overwrite="SSL证书文件已存在，是否覆盖？(y/n): "
         if /i not "%overwrite%"=="y" (
             echo 取消操作，保留现有证书
@@ -15,16 +21,16 @@ if exist key.pem (
     )
 )
 
-REM 生成自签名证书
-openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/C=CN/ST=Beijing/L=Beijing/O=VideoServer/OU=IT/CN=localhost"
+REM 生成自签名证书到 data 目录
+openssl req -x509 -newkey rsa:2048 -keyout data\key.pem -out data\cert.pem -days 365 -nodes -subj "/C=CN/ST=Beijing/L=Beijing/O=VideoServer/OU=IT/CN=localhost"
 
 if %errorlevel% equ 0 (
     echo.
     echo =================================================
     echo SSL证书生成成功！
     echo =================================================
-    echo 证书文件: cert.pem
-    echo 私钥文件: key.pem
+    echo 证书文件: data\cert.pem
+    echo 私钥文件: data\key.pem
     echo 有效期: 365天
     echo.
     echo 注意: 这是一个自签名证书，浏览器会显示安全警告。
