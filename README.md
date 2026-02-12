@@ -22,6 +22,7 @@ rmt/
 ├── config.json            # 配置文件
 ├── package.json           # 依赖管理
 ├── data/                  # 数据目录
+│   ├── config.json        # 自定义配置（优先级高）
 │   ├── sessions.json      # 会话持久化
 │   ├── favorites.json     # 收藏数据
 │   ├── videoCache.json    # 视频缓存
@@ -90,7 +91,19 @@ sudo certbot certonly --standalone -d your-domain.com
 
 ### 3. 配置项目
 
-编辑 `config.json` 文件：
+#### 配置文件优先级
+
+项目支持两个配置文件位置，优先级如下：
+
+1. **`data/config.json`** - 优先级高，适合存放自定义配置
+2. **`config.json`** - 根目录配置，默认配置
+
+**使用建议：**
+- 将 `config.json` 保持默认配置，用于版本控制
+- 在 `data/config.json` 中存放你的个性化配置（用户名、密码、视频目录等）
+- `data/` 目录通常不纳入版本控制，适合存放敏感信息
+
+编辑配置文件：
 
 ```json
 {
