@@ -5,7 +5,7 @@
       "password": "123"
     }
   ],
-  "port": 8899,
+  "port": 18899,
   "host": "::",
   "https": {
     "enabled": true,
@@ -15,7 +15,7 @@
   "videoDirs": [
     {
       "name": "默认目录",
-      "path": "/Users/alyr/Desktop/录像截屏"
+      "path": "/Users/alyr/Desktop/test"
     }
   ]
 }

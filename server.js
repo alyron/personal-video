@@ -658,7 +658,7 @@ app.get('/video/:videoId', requireAuth, (req, res) => {
 });
 
 // GET video stream endpoint with Range support
-app.get('/video/:videoId', requireAuth, (req, res) => {
+app.get('/video-stream/:videoId', requireAuth, (req, res) => {
   const videoId = req.params.videoId;
 
   if (!videoId) {
@@ -803,10 +803,10 @@ server.listen(port, host, () => {
   console.log('视频服务已启动！');
   console.log('=================================================');
   console.log(`协议: ${config.https && config.https.enabled ? 'HTTPS' : 'HTTP'}`);
-  console.log(`访问地址 (IPv6): ${(config.https && config.https.enabled ? 'https' : 'http'}://[::1]:${port}`);
-  console.log(`访问地址 (IPv4): ${(config.https && config.https.enabled ? 'https' : 'http'}://127.0.0.1:${port}`);
-  console.log(`访问地址 (本地网络 IPv4): ${(config.https && config.https.enabled ? 'https' : 'http'}://<本机IP>:${port}`);
-  console.log(`访问地址 (本地网络 IPv6): ${(config.https && config.https.enabled ? 'https' : 'http'}://[本机IPv6地址>:${port}`);
+  console.log(`访问地址 (IPv6): ${(config.https && config.https.enabled ? 'https' : 'http')}://[::1]:${port}`);
+  console.log(`访问地址 (IPv4): ${(config.https && config.https.enabled ? 'https' : 'http')}://127.0.0.1:${port}`);
+  console.log(`访问地址 (本地网络 IPv4): ${(config.https && config.https.enabled ? 'https' : 'http')}://<本机IP>:${port}`);
+  console.log(`访问地址 (本地网络 IPv6): ${(config.https && config.https.enabled ? 'https' : 'http')}://[本机IPv6地址]:${port}`);
   console.log('=================================================');
   console.log('默认登录信息:');
   console.log('用户名: admin');
