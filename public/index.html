@@ -41,6 +41,37 @@
         .video-item {
             position: relative;
         }
+        /* 排序按钮 */
+        .sort-btn {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .sort-btn:hover {
+            background: #f5f5f5;
+        }
+        .sort-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .toolbar-left {
+            display: flex;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
@@ -57,6 +88,14 @@
         <div class="tabs">
             <button class="tab-btn active" data-tab="all" onclick="switchTab('all')">全部视频</button>
             <button class="tab-btn" data-tab="favorites" onclick="switchTab('favorites')">❤ 我的收藏</button>
+        </div>
+
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <button class="sort-btn" id="sortBySizeBtn" onclick="toggleSortBySize()">
+                    <span>📊</span> 按容量排序
+                </button>
+            </div>
         </div>
 
         <div class="stats-bar">
@@ -96,6 +135,31 @@
         let currentTab = 'all';
         let allVideos = [];
         let favorites = [];
+        let sortBySize = false; // 是否按容量排序
+
+        // 解析文件大小字符串为字节数
+        function parseSizeToBytes(sizeStr) {
+            if (!sizeStr) return 0;
+            const match = sizeStr.match(/([\d.]+)\s*(GB|MB|KB|TB|B)/i);
+            if (!match) return 0;
+
+            const value = parseFloat(match[1]);
+            const unit = match[2].toUpperCase();
+
+            const units = { 'B': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4 };
+            return value * (units[unit] || 1);
+        }
+
+        // 切换按容量排序
+        function toggleSortBySize() {
+            sortBySize = !sortBySize;
+            const btn = document.getElementById('sortBySizeBtn');
+            btn.classList.toggle('active', sortBySize);
+
+            if (currentTab === 'all') {
+                renderVideoList(allVideos);
+            }
+        }
 
         // 统一 API 请求处理
         async function api(url, options = {}) {
@@ -195,7 +259,7 @@
         function renderVideoList(videos) {
             const videoList = document.getElementById('videoList');
             const quickNav = document.getElementById('quickNav');
-            
+
             if (videos.length === 0) {
                 videoList.innerHTML = `
                     <div class="empty-state">
@@ -206,10 +270,16 @@
                 quickNav.style.display = 'none';
                 return;
             }
-            
+
+            // 如果按容量排序，先按大小排序（保持目录分组，但组内按大小排序）
+            let videosToRender = [...videos];
+            if (sortBySize) {
+                videosToRender.sort((a, b) => parseSizeToBytes(b.size) - parseSizeToBytes(a.size));
+            }
+
             // 按目录分组
             const grouped = {};
-            videos.forEach(video => {
+            videosToRender.forEach(video => {
                 if (!grouped[video.dirName]) {
                     grouped[video.dirName] = [];
                 }
