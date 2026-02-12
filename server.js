@@ -83,6 +83,10 @@ if (cfg.https && cfg.https.enabled) {
   server = http.createServer(app);
 }
 
+// 设置服务器超时时间（大文件下载需要更长超时）
+server.timeout = 30 * 60 * 1000; // 30分钟
+server.keepAliveTimeout = 65000; // 保持连接超时
+
 // 启动服务器
 server.listen(port, host, () => {
   const protocol = cfg.https && cfg.https.enabled ? 'https' : 'http';

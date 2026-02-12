@@ -446,72 +446,22 @@
             }
         }
 
-        // 下载视频
-        async function downloadVideo() {
+        // 下载视频 - 直接使用浏览器原生下载，避免大文件内存溢出
+        function downloadVideo() {
             if (!currentVideoId) return;
             
-            const btn = document.getElementById('downloadBtn');
             const progress = document.getElementById('downloadProgress');
+            progress.textContent = '已开始下载，请查看浏览器下载管理器';
             
-            btn.disabled = true;
-            btn.innerHTML = '<span>⏳</span> 下载中...';
-            progress.textContent = '准备下载...';
+            // 使用 window.location 直接跳转到下载链接
+            // 浏览器会因为 Content-Disposition: attachment 而触发下载而非导航
+            const downloadUrl = `/api/download/${currentVideoId}`;
+            window.location.href = downloadUrl;
             
-            try {
-                const response = await fetch(`/api/download/${currentVideoId}`, {
-                    credentials: 'same-origin'
-                });
-                
-                if (response.status === 401) {
-                    window.location.href = '/login.html';
-                    return;
-                }
-                
-                if (!response.ok) {
-                    throw new Error('下载失败');
-                }
-                
-                const contentLength = response.headers.get('Content-Length');
-                const total = contentLength ? parseInt(contentLength, 10) : 0;
-                
-                const reader = response.body.getReader();
-                const chunks = [];
-                let received = 0;
-                
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    chunks.push(value);
-                    received += value.length;
-                    
-                    if (total > 0) {
-                        const percent = Math.round((received / total) * 100);
-                        progress.textContent = `已下载: ${formatSize(received)} / ${formatSize(total)} (${percent}%)`;
-                    } else {
-                        progress.textContent = `已下载: ${formatSize(received)}`;
-                    }
-                }
-                
-                const blob = new Blob(chunks);
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = currentFilename || 'video.mp4';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                progress.textContent = '下载完成！';
-                
-            } catch (err) {
-                console.error('下载失败:', err);
-                progress.textContent = '下载失败: ' + err.message;
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<span>⬇</span> 下载视频';
-            }
+            // 5秒后清除提示
+            setTimeout(() => {
+                progress.textContent = '';
+            }, 5000);
         }
 
         function formatSize(bytes) {
