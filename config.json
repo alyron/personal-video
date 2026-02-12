@@ -1,0 +1,21 @@
+{
+  "users": [
+    {
+      "username": "123",
+      "password": "123"
+    }
+  ],
+  "port": 8899,
+  "host": "::",
+  "https": {
+    "enabled": true,
+    "key": "./key.pem",
+    "cert": "./cert.pem"
+  },
+  "videoDirs": [
+    {
+      "name": "默认目录",
+      "path": "/Users/alyr/Desktop/录像截屏"
+    }
+  ]
+}

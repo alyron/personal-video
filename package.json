@@ -1,0 +1,13 @@
+{
+  "name": "video-server",
+  "version": "1.0.0",
+  "description": "A simple video server with authentication and IPv6 support",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cookie-parser": "^1.4.6"
+  }
+}
