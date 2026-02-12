@@ -82,10 +82,8 @@
     <div class="player-container">
         <div class="player-header">
             <div class="player-header-content">
-                <span class="dir-badge" id="dirBadge">📁 加载中...</span>
                 <h1 class="video-title" id="videoTitle">加载中...</h1>
             </div>
-            <a href="/" class="back-btn">← 返回</a>
         </div>
 
         <div class="player-body">
@@ -256,14 +254,12 @@
             const urlParams = new URLSearchParams(window.location.search);
             const videoId = urlParams.get('id');
 
-            const dirBadge = document.getElementById('dirBadge');
             const videoTitle = document.getElementById('videoTitle');
             const downloadBtn = document.getElementById('downloadBtn');
             const favoriteBtn = document.getElementById('favoriteBtn');
 
             if (!videoId) {
                 videoTitle.textContent = '视频ID无效';
-                dirBadge.textContent = '❌ 错误';
                 return;
             }
 
@@ -283,8 +279,8 @@
 
                 const info = await response.json();
 
-                dirBadge.textContent = `📁 ${info.dirName}`;
-                videoTitle.textContent = info.filename;
+                // 显示完整路径
+                videoTitle.textContent = info.relativePath;
                 currentFilename = info.filename;
                 currentDirName = info.dirName;
                 currentContentType = info.contentType;
@@ -298,7 +294,6 @@
             } catch (err) {
                 console.error('加载视频信息失败:', err);
                 videoTitle.textContent = '加载失败';
-                dirBadge.textContent = '❌ 错误';
             }
         });
     </script>
