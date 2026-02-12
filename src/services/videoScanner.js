@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const videoCache = require('../models/videoCache');
+const videoIdManager = require('../utils/videoId');
 
 // 支持的视频扩展名
 const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.mov', '.webm'];
@@ -150,6 +151,12 @@ async function scanAllDirectories() {
   
   videoCache.setScanning(false);
   videoCache.updateLastScanTime();
+  
+  // 注册所有视频ID（用于反向查找）
+  videoIdManager.registerVideos(videoCache.getVideos());
+  
+  // 保存缓存到文件
+  videoCache.saveCache();
   
   console.log(`=================================================`);
   console.log(`扫描完成！总计找到 ${videoCache.getVideos().length} 个视频文件`);

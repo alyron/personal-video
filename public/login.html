@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - 视频服务器</title>
+    <title>登录</title>
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body class="login-page">
     <div class="login-container">
-        <h1>视频服务器</h1>
+        <h1>测试服务器</h1>
         <form id="loginForm">
             <div class="form-group">
                 <label for="username">用户名</label>
@@ -33,11 +33,11 @@
         // 登录表单提交
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             const errorMsg = document.getElementById('errorMsg');
-            
+
             try {
                 const response = await fetch('/api/login', {
                     method: 'POST',
@@ -45,9 +45,9 @@
                     body: JSON.stringify({ username, password }),
                     credentials: 'same-origin'
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (result.success) {
                     window.location.href = '/';
                 } else {

@@ -23,6 +23,8 @@ const { authRoutes, apiRoutes, pageRoutes } = require('./src/routes');
 
 // 加载服务
 const videoScanner = require('./src/services/videoScanner');
+const videoCache = require('./src/models/videoCache');
+const videoIdManager = require('./src/utils/videoId');
 
 // 创建 Express 应用
 const app = express();
@@ -103,11 +105,20 @@ server.listen(port, host, () => {
   }
   console.log('=================================================');
   
-  // 启动后自动扫描视频目录
-  console.log('正在扫描视频目录...');
-  videoScanner.scanAllDirectories().catch(err => {
-    console.error('初始扫描失败:', err.message);
-  });
+  // 启动时加载视频缓存
+  const cacheLoaded = videoCache.loadCache();
+  
+  if (cacheLoaded && videoCache.getVideos().length > 0) {
+    // 缓存存在，直接注册视频ID
+    videoIdManager.registerVideos(videoCache.getVideos());
+    console.log(`使用缓存数据，如需更新请点击"刷新扫描"`);
+  } else {
+    // 无缓存，启动后台扫描
+    console.log('正在扫描视频目录...');
+    videoScanner.scanAllDirectories().catch(err => {
+      console.error('初始扫描失败:', err.message);
+    });
+  }
 });
 
 // 优雅关闭

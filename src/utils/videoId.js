@@ -1,19 +1,22 @@
 /**
  * 视频ID管理模块
+ * 
+ * ID 生成规则：基于 dirName:relativePath 生成确定性哈希
+ * 同一视频文件始终生成相同的 ID，确保收藏等功能持久有效
  */
 const crypto = require('crypto');
 
-// 视频ID映射 (hash ID -> { dirName, relativePath, createdAt })
+// 视频ID映射 (hash ID -> { dirName, relativePath })
 const videoIdMap = new Map();
 
 /**
- * 生成视频ID
+ * 生成确定性视频ID
  * @param {string} dirName 目录名
- * @param {string} filename 文件名
+ * @param {string} relativePath 相对路径
  * @returns {string} 16字符哈希ID
  */
-function generateVideoId(dirName, filename) {
-  const data = `${dirName}:${filename}:${Date.now()}:${Math.random()}`;
+function generateVideoId(dirName, relativePath) {
+  const data = `${dirName}:${relativePath}`;
   return crypto.createHash('sha256').update(data).digest('hex').substring(0, 16);
 }
 
@@ -24,22 +27,16 @@ function generateVideoId(dirName, filename) {
  * @returns {string} 视频ID
  */
 function getVideoId(dirName, relativePath) {
-  // 检查是否已有ID
-  for (const [id, info] of videoIdMap.entries()) {
-    if (info.dirName === dirName && info.relativePath === relativePath) {
-      info.lastAccessed = Date.now();
-      return id;
-    }
-  }
-  
-  // 创建新ID
+  // 生成确定性 ID
   const videoId = generateVideoId(dirName, relativePath);
-  videoIdMap.set(videoId, {
-    dirName,
-    relativePath,
-    createdAt: Date.now(),
-    lastAccessed: Date.now()
-  });
+  
+  // 存储映射关系（用于反向查找）
+  if (!videoIdMap.has(videoId)) {
+    videoIdMap.set(videoId, {
+      dirName,
+      relativePath
+    });
+  }
   
   return videoId;
 }
@@ -50,34 +47,37 @@ function getVideoId(dirName, relativePath) {
  * @returns {object|null} 视频信息
  */
 function getVideoById(videoId) {
-  const info = videoIdMap.get(videoId);
-  if (info) {
-    info.lastAccessed = Date.now();
-    return info;
-  }
-  return null;
+  return videoIdMap.get(videoId) || null;
 }
 
 /**
- * 清理过期视频ID (超过1小时未访问)
+ * 注册视频信息（用于启动时重建映射）
+ * @param {string} videoId 视频ID
+ * @param {string} dirName 目录名
+ * @param {string} relativePath 相对路径
  */
-function cleanupExpiredIds() {
-  const now = Date.now();
-  const oneHour = 60 * 60 * 1000;
-  
-  for (const [id, info] of videoIdMap.entries()) {
-    if (now - info.lastAccessed > oneHour) {
-      videoIdMap.delete(id);
-    }
-  }
+function registerVideo(videoId, dirName, relativePath) {
+  videoIdMap.set(videoId, { dirName, relativePath });
 }
 
-// 每小时清理一次
-setInterval(cleanupExpiredIds, 60 * 60 * 1000);
+/**
+ * 批量注册视频（扫描完成后调用）
+ * @param {Array} videos 视频列表
+ */
+function registerVideos(videos) {
+  videos.forEach(video => {
+    const videoId = generateVideoId(video.dirName, video.relativePath);
+    videoIdMap.set(videoId, {
+      dirName: video.dirName,
+      relativePath: video.relativePath
+    });
+  });
+}
 
 module.exports = {
   generateVideoId,
   getVideoId,
   getVideoById,
-  cleanupExpiredIds
+  registerVideo,
+  registerVideos
 };
