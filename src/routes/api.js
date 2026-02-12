@@ -74,4 +74,12 @@ router.get('/stream/:videoId', requireAuth, (req, res) => {
   videoStream.streamVideo(req, res, videoId);
 });
 
+/**
+ * 视频下载
+ */
+router.get('/download/:videoId', requireAuth, (req, res) => {
+  const { videoId } = req.params;
+  videoStream.downloadVideo(res, videoId);
+});
+
 module.exports = router;

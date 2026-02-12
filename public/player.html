@@ -5,6 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>视频播放 - 视频服务器</title>
     <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .player-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        .download-btn:hover {
+            background-color: #45a049;
+        }
+        .download-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .download-progress {
+            font-size: 12px;
+            color: #666;
+            margin-left: 10px;
+        }
+    </style>
 </head>
 <body>
     <div class="player-container">
@@ -19,9 +52,19 @@
         <div class="video-wrapper">
             <video id="videoPlayer" controls preload="metadata"></video>
         </div>
+
+        <div class="player-actions">
+            <button id="downloadBtn" class="download-btn" style="display: none;">
+                <span>⬇</span> 下载视频
+            </button>
+            <span id="downloadProgress" class="download-progress"></span>
+        </div>
     </div>
 
     <script>
+        let currentVideoId = null;
+        let currentFilename = null;
+
         // 统一 API 请求处理
         async function api(url, options = {}) {
             const response = await fetch(url, { 
@@ -37,6 +80,86 @@
             return response;
         }
 
+        // 下载视频
+        async function downloadVideo() {
+            if (!currentVideoId) return;
+            
+            const btn = document.getElementById('downloadBtn');
+            const progress = document.getElementById('downloadProgress');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳</span> 下载中...';
+            progress.textContent = '准备下载...';
+            
+            try {
+                const response = await fetch(`/api/download/${currentVideoId}`, {
+                    credentials: 'same-origin'
+                });
+                
+                if (response.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('下载失败');
+                }
+                
+                // 获取文件大小
+                const contentLength = response.headers.get('Content-Length');
+                const total = contentLength ? parseInt(contentLength, 10) : 0;
+                
+                // 读取流并显示进度
+                const reader = response.body.getReader();
+                const chunks = [];
+                let received = 0;
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) break;
+                    
+                    chunks.push(value);
+                    received += value.length;
+                    
+                    if (total > 0) {
+                        const percent = Math.round((received / total) * 100);
+                        progress.textContent = `已下载: ${formatSize(received)} / ${formatSize(total)} (${percent}%)`;
+                    } else {
+                        progress.textContent = `已下载: ${formatSize(received)}`;
+                    }
+                }
+                
+                // 创建 Blob 并下载
+                const blob = new Blob(chunks);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = currentFilename || 'video.mp4';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                progress.textContent = '下载完成！';
+                
+            } catch (err) {
+                console.error('下载失败:', err);
+                progress.textContent = '下载失败: ' + err.message;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>⬇</span> 下载视频';
+            }
+        }
+
+        // 格式化文件大小
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        }
+
         document.addEventListener('DOMContentLoaded', async () => {
             // 从 URL 获取视频 ID
             const urlParams = new URLSearchParams(window.location.search);
@@ -45,12 +168,17 @@
             const dirBadge = document.getElementById('dirBadge');
             const videoTitle = document.getElementById('videoTitle');
             const videoPlayer = document.getElementById('videoPlayer');
+            const downloadBtn = document.getElementById('downloadBtn');
             
             if (!videoId) {
                 videoTitle.textContent = '视频ID无效';
                 dirBadge.textContent = '❌ 错误';
                 return;
             }
+            
+            currentVideoId = videoId;
+            downloadBtn.style.display = 'inline-flex';
+            downloadBtn.addEventListener('click', downloadVideo);
             
             try {
                 const response = await api(`/api/video-info?id=${videoId}`);
@@ -64,6 +192,7 @@
                 dirBadge.textContent = `📁 ${info.dirName}`;
                 videoTitle.textContent = info.filename;
                 videoPlayer.src = `/api/stream/${videoId}`;
+                currentFilename = info.filename;
                 
             } catch (err) {
                 console.error('加载视频信息失败:', err);

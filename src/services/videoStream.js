@@ -146,8 +146,45 @@ function streamVideo(req, res, videoId) {
   }
 }
 
+/**
+ * 下载视频
+ * @param {object} res Express响应对象
+ * @param {string} videoId 视频ID
+ */
+function downloadVideo(res, videoId) {
+  const pathInfo = getVideoPath(videoId);
+  if (!pathInfo) {
+    return res.status(404).json({ error: '视频不存在或已过期' });
+  }
+  
+  const { filePath, filename, contentType } = pathInfo;
+  const stat = fs.statSync(filePath);
+  const fileSize = stat.size;
+  
+  console.log(`Download: ${filename} (${fileSize} bytes)`);
+  
+  // 设置下载响应头
+  res.writeHead(200, {
+    'Content-Type': contentType,
+    'Content-Length': fileSize,
+    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    'Cache-Control': 'no-cache'
+  });
+  
+  const fileStream = fs.createReadStream(filePath);
+  fileStream.pipe(res);
+  
+  fileStream.on('error', (err) => {
+    console.error('视频下载失败:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: '视频下载失败' });
+    }
+  });
+}
+
 module.exports = {
   getVideoPath,
   getVideoInfo,
-  streamVideo
+  streamVideo,
+  downloadVideo
 };
