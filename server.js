@@ -21,6 +21,9 @@ const config = require('./src/config');
 // 加载路由
 const { authRoutes, apiRoutes, pageRoutes } = require('./src/routes');
 
+// 加载服务
+const videoScanner = require('./src/services/videoScanner');
+
 // 创建 Express 应用
 const app = express();
 
@@ -99,6 +102,12 @@ server.listen(port, host, () => {
     console.log('HTTPS 已启用，使用加密连接传输数据');
   }
   console.log('=================================================');
+  
+  // 启动后自动扫描视频目录
+  console.log('正在扫描视频目录...');
+  videoScanner.scanAllDirectories().catch(err => {
+    console.error('初始扫描失败:', err.message);
+  });
 });
 
 // 优雅关闭
