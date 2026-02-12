@@ -30,10 +30,10 @@ router.post('/api/login', (req, res) => {
   // 创建会话
   const sessionId = sessionManager.createSession(username);
   
-  // 设置Cookie
+  // 设置Cookie (7天有效期)
   res.cookie('sessionId', sessionId, {
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24小时
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7天
     secure: cfg.https?.enabled || false,
     sameSite: 'strict'
   });
