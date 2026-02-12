@@ -518,7 +518,6 @@ body:hover .page-slider,
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-    --plyr-color-main: #667eea;
     max-height: calc(100vh - 200px);
 }
 
@@ -532,53 +531,12 @@ body:hover .page-slider,
     outline: none;
 }
 
-/* Plyr 播放器适配 */
-.video-wrapper .plyr {
-    max-height: calc(100vh - 200px);
-}
-
-/* 全屏模式下移除高度限制 */
-.plyr--fullscreen-active,
-.plyr--fullscreen-active video,
-.plyr--fullscreen-active .plyr__video-wrapper {
-    max-height: none !important;
-    height: 100% !important;
-}
-
 .player-actions {
     margin-top: 15px;
     display: flex;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
-}
-
-/* ===== DPlayer 修复 ===== */
-.dplayer {
-    position: relative;
-    width: 100%;
-}
-
-.dplayer-video-wrap {
-    position: relative !important;
-}
-
-.dplayer-controller {
-    position: absolute !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-}
-
-.dplayer-controller-mask {
-    position: absolute !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-}
-
-.dplayer-notice {
-    pointer-events: none;
 }
 
 /* ===== 加载状态 ===== */
@@ -682,18 +640,6 @@ body:hover .page-slider,
 
     .video-wrapper video {
         max-height: calc(100vh - 160px);
-    }
-
-    .video-wrapper .plyr {
-        max-height: calc(100vh - 160px);
-    }
-
-    /* 全屏模式下移除高度限制 */
-    .plyr--fullscreen-active,
-    .plyr--fullscreen-active video,
-    .plyr--fullscreen-active .plyr__video-wrapper {
-        max-height: none !important;
-        height: 100% !important;
     }
 
     .player-actions {
