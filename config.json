@@ -7,6 +7,7 @@
   ],
   "port": 18899,
   "host": "::",
+  "debug": false,
   "https": {
     "enabled": true,
     "key": "./data/key.pem",

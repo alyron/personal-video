@@ -16,6 +16,16 @@ const CONTENT_TYPE_MAP = {
 };
 
 /**
+ * 调试日志输出
+ */
+function debugLog(...args) {
+  const cfg = config.getConfig();
+  if (cfg.debug) {
+    console.log(...args);
+  }
+}
+
+/**
  * 获取视频文件路径
  * @param {string} videoId 视频ID
  * @returns {object|null} { filePath, filename, contentType } 或 null
@@ -102,7 +112,7 @@ function streamVideo(req, res, videoId) {
       return res.status(416).json({ error: '请求范围无效' });
     }
     
-    console.log(`Stream range: ${start}-${end} (${chunkSize} bytes)`);
+    debugLog(`Stream range: ${start}-${end} (${chunkSize} bytes)`);
     
     const fileStream = fs.createReadStream(filePath, { start, end });
     
@@ -125,7 +135,7 @@ function streamVideo(req, res, videoId) {
     });
   } else {
     // 完整文件传输
-    console.log(`Stream full file: ${filePath} (${fileSize} bytes)`);
+    debugLog(`Stream full file: ${filePath} (${fileSize} bytes)`);
     
     const fileStream = fs.createReadStream(filePath);
     
@@ -163,7 +173,7 @@ function downloadVideo(res, videoId) {
   const stat = fs.statSync(filePath);
   const fileSize = stat.size;
   
-  console.log(`Download: ${filename} (${fileSize} bytes)`);
+  debugLog(`Download: ${filename} (${fileSize} bytes)`);
   
   // 设置下载响应头
   res.writeHead(200, {

@@ -159,7 +159,7 @@
                                 <div class="video-name">${video.filename}</div>
                                 <div class="video-meta">收藏于: ${formatTimestamp(video.addedAt)}</div>
                             </div>
-                            <a href="/player.html?id=${video.videoId}" class="watch-btn">观看</a>
+                            <a href="/player.html?id=${video.videoId}" class="watch-btn" target="_blank">观看</a>
                         </div>
                     `;
                 });
@@ -222,7 +222,7 @@
                                             <div class="video-name">${video.name} ${isFav ? '<span style="color:#ff6b6b">♥</span>' : ''}</div>
                                             <div class="video-meta">大小: ${video.size} | 修改时间: ${video.modified}</div>
                                         </div>
-                                        <a href="/player.html?id=${video.id}" class="watch-btn">观看</a>
+                                        <a href="/player.html?id=${video.id}" class="watch-btn" target="_blank">观看</a>
                                     </div>
                                 `;
                             }).join('')}
