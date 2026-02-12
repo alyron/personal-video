@@ -9,8 +9,8 @@
   "host": "::",
   "https": {
     "enabled": true,
-    "key": "./key.pem",
-    "cert": "./cert.pem"
+    "key": "./data/key.pem",
+    "cert": "./data/cert.pem"
   },
   "videoDirs": [
     {
