@@ -7,6 +7,7 @@ const videoScanner = require('../services/videoScanner');
 const videoCache = require('../models/videoCache');
 const videoStream = require('../services/videoStream');
 const videoIdManager = require('../utils/videoId');
+const favoriteManager = require('../models/favorite');
 const { requireAuth } = require('../middleware/auth');
 
 /**
@@ -80,6 +81,57 @@ router.get('/stream/:videoId', requireAuth, (req, res) => {
 router.get('/download/:videoId', requireAuth, (req, res) => {
   const { videoId } = req.params;
   videoStream.downloadVideo(res, videoId);
+});
+
+/**
+ * 获取收藏列表
+ */
+router.get('/favorites', requireAuth, (req, res) => {
+  const username = req.session.username;
+  const favorites = favoriteManager.getFavorites(username);
+  res.json({ favorites });
+});
+
+/**
+ * 添加收藏
+ */
+router.post('/favorite', requireAuth, (req, res) => {
+  const username = req.session.username;
+  const { videoId, dirName, filename } = req.body;
+  
+  if (!videoId) {
+    return res.status(400).json({ error: '缺少 videoId' });
+  }
+  
+  const success = favoriteManager.addFavorite(username, { 
+    videoId, 
+    dirName, 
+    filename 
+  });
+  
+  res.json({ success });
+});
+
+/**
+ * 取消收藏
+ */
+router.delete('/favorite/:videoId', requireAuth, (req, res) => {
+  const username = req.session.username;
+  const { videoId } = req.params;
+  
+  const success = favoriteManager.removeFavorite(username, videoId);
+  res.json({ success });
+});
+
+/**
+ * 检查是否已收藏
+ */
+router.get('/favorite/check/:videoId', requireAuth, (req, res) => {
+  const username = req.session.username;
+  const { videoId } = req.params;
+  
+  const isFav = favoriteManager.isFavorite(username, videoId);
+  res.json({ isFavorite: isFav });
 });
 
 module.exports = router;

@@ -8,22 +8,25 @@
     <style>
         .player-actions {
             display: flex;
+            align-items: center;
             gap: 10px;
             margin-top: 15px;
         }
-        .download-btn {
+        .action-btn {
             display: inline-flex;
             align-items: center;
             gap: 6px;
             padding: 10px 20px;
-            background-color: #4CAF50;
-            color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            text-decoration: none;
             font-size: 14px;
-            transition: background-color 0.3s;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        .download-btn {
+            background-color: #4CAF50;
+            color: white;
         }
         .download-btn:hover {
             background-color: #45a049;
@@ -31,6 +34,23 @@
         .download-btn:disabled {
             background-color: #ccc;
             cursor: not-allowed;
+        }
+        .favorite-btn {
+            background-color: #fff;
+            color: #666;
+            border: 1px solid #ddd;
+        }
+        .favorite-btn:hover {
+            border-color: #ff6b6b;
+            color: #ff6b6b;
+        }
+        .favorite-btn.active {
+            background-color: #ff6b6b;
+            color: white;
+            border-color: #ff6b6b;
+        }
+        .favorite-btn.active:hover {
+            background-color: #ee5a5a;
         }
         .download-progress {
             font-size: 12px;
@@ -54,7 +74,10 @@
         </div>
 
         <div class="player-actions">
-            <button id="downloadBtn" class="download-btn" style="display: none;">
+            <button id="favoriteBtn" class="action-btn favorite-btn" style="display: none;">
+                <span id="favoriteIcon">♡</span> <span id="favoriteText">收藏</span>
+            </button>
+            <button id="downloadBtn" class="action-btn download-btn" style="display: none;">
                 <span>⬇</span> 下载视频
             </button>
             <span id="downloadProgress" class="download-progress"></span>
@@ -64,6 +87,8 @@
     <script>
         let currentVideoId = null;
         let currentFilename = null;
+        let currentDirName = null;
+        let isFavorite = false;
 
         // 统一 API 请求处理
         async function api(url, options = {}) {
@@ -78,6 +103,80 @@
             }
             
             return response;
+        }
+
+        // 检查收藏状态
+        async function checkFavorite() {
+            if (!currentVideoId) return;
+            
+            try {
+                const response = await api(`/api/favorite/check/${currentVideoId}`);
+                const data = await response.json();
+                isFavorite = data.isFavorite;
+                updateFavoriteUI();
+            } catch (err) {
+                console.error('检查收藏状态失败:', err);
+            }
+        }
+
+        // 更新收藏按钮 UI
+        function updateFavoriteUI() {
+            const btn = document.getElementById('favoriteBtn');
+            const icon = document.getElementById('favoriteIcon');
+            const text = document.getElementById('favoriteText');
+            
+            if (isFavorite) {
+                icon.textContent = '♥';
+                text.textContent = '已收藏';
+                btn.classList.add('active');
+            } else {
+                icon.textContent = '♡';
+                text.textContent = '收藏';
+                btn.classList.remove('active');
+            }
+        }
+
+        // 切换收藏状态
+        async function toggleFavorite() {
+            if (!currentVideoId) return;
+            
+            const btn = document.getElementById('favoriteBtn');
+            btn.disabled = true;
+            
+            try {
+                if (isFavorite) {
+                    // 取消收藏
+                    const response = await api(`/api/favorite/${currentVideoId}`, {
+                        method: 'DELETE'
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        isFavorite = false;
+                        updateFavoriteUI();
+                    }
+                } else {
+                    // 添加收藏
+                    const response = await api('/api/favorite', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            videoId: currentVideoId,
+                            dirName: currentDirName,
+                            filename: currentFilename
+                        })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        isFavorite = true;
+                        updateFavoriteUI();
+                    }
+                }
+            } catch (err) {
+                console.error('收藏操作失败:', err);
+                alert('操作失败，请重试');
+            } finally {
+                btn.disabled = false;
+            }
         }
 
         // 下载视频
@@ -105,18 +204,15 @@
                     throw new Error('下载失败');
                 }
                 
-                // 获取文件大小
                 const contentLength = response.headers.get('Content-Length');
                 const total = contentLength ? parseInt(contentLength, 10) : 0;
                 
-                // 读取流并显示进度
                 const reader = response.body.getReader();
                 const chunks = [];
                 let received = 0;
                 
                 while (true) {
                     const { done, value } = await reader.read();
-                    
                     if (done) break;
                     
                     chunks.push(value);
@@ -130,7 +226,6 @@
                     }
                 }
                 
-                // 创建 Blob 并下载
                 const blob = new Blob(chunks);
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -152,7 +247,6 @@
             }
         }
 
-        // 格式化文件大小
         function formatSize(bytes) {
             if (bytes < 1024) return bytes + ' B';
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -161,7 +255,6 @@
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // 从 URL 获取视频 ID
             const urlParams = new URLSearchParams(window.location.search);
             const videoId = urlParams.get('id');
             
@@ -169,6 +262,7 @@
             const videoTitle = document.getElementById('videoTitle');
             const videoPlayer = document.getElementById('videoPlayer');
             const downloadBtn = document.getElementById('downloadBtn');
+            const favoriteBtn = document.getElementById('favoriteBtn');
             
             if (!videoId) {
                 videoTitle.textContent = '视频ID无效';
@@ -178,7 +272,10 @@
             
             currentVideoId = videoId;
             downloadBtn.style.display = 'inline-flex';
+            favoriteBtn.style.display = 'inline-flex';
+            
             downloadBtn.addEventListener('click', downloadVideo);
+            favoriteBtn.addEventListener('click', toggleFavorite);
             
             try {
                 const response = await api(`/api/video-info?id=${videoId}`);
@@ -193,6 +290,10 @@
                 videoTitle.textContent = info.filename;
                 videoPlayer.src = `/api/stream/${videoId}`;
                 currentFilename = info.filename;
+                currentDirName = info.dirName;
+                
+                // 检查收藏状态
+                await checkFavorite();
                 
             } catch (err) {
                 console.error('加载视频信息失败:', err);

@@ -5,6 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>视频列表 - 视频服务器</title>
     <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            border: none;
+            background: #f5f5f5;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .tab-btn:hover {
+            background: #e0e0e0;
+        }
+        .tab-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        .video-item .favorite-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #ff6b6b;
+            font-size: 18px;
+        }
+        .video-item {
+            position: relative;
+        }
+    </style>
 </head>
 <body>
     <header class="header">
@@ -17,14 +54,19 @@
     </header>
 
     <main class="main-content">
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="all" onclick="switchTab('all')">全部视频</button>
+            <button class="tab-btn" data-tab="favorites" onclick="switchTab('favorites')">❤ 我的收藏</button>
+        </div>
+
         <div class="stats-bar">
             <div class="stat-item">
                 <div class="stat-number" id="videoCount">0</div>
-                <div class="stat-label">视频总数</div>
+                <div class="stat-label" id="videoLabel">视频总数</div>
             </div>
             <div class="stat-item">
                 <div class="stat-number" id="dirCount">0</div>
-                <div class="stat-label">目录数</div>
+                <div class="stat-label" id="dirLabel">目录数</div>
             </div>
             <div class="stat-item">
                 <div class="stat-label" id="scanStatus">检查状态中...</div>
@@ -41,11 +83,15 @@
 
     <script src="/js/app.js"></script>
     <script>
+        let currentTab = 'all';
+        let allVideos = [];
+        let favorites = [];
+
         // 统一 API 请求处理
         async function api(url, options = {}) {
             const response = await fetch(url, { 
                 ...options,
-                credentials: 'same-origin'  // 确保携带 Cookie
+                credentials: 'same-origin'
             });
             
             if (response.status === 401) {
@@ -56,85 +102,160 @@
             return response;
         }
 
-        // 页面初始化
-        document.addEventListener('DOMContentLoaded', async () => {
-            // 获取当前用户信息
+        // 切换标签
+        async function switchTab(tab) {
+            currentTab = tab;
+            
+            // 更新按钮状态
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+            
+            // 更新统计标签
+            document.getElementById('videoLabel').textContent = tab === 'all' ? '视频总数' : '收藏数量';
+            document.getElementById('dirLabel').textContent = tab === 'all' ? '目录数' : '来源目录';
+            
+            // 渲染对应列表
+            if (tab === 'all') {
+                renderVideoList(allVideos);
+            } else {
+                // 加载收藏
+                await loadFavorites();
+            }
+        }
+
+        // 加载收藏列表
+        async function loadFavorites() {
+            const videoList = document.getElementById('videoList');
+            
             try {
-                const userRes = await api('/api/user');
-                if (!userRes.ok) throw new Error('获取用户信息失败');
-                const userData = await userRes.json();
-                document.getElementById('userBadge').textContent = `👤 ${userData.username}`;
+                const response = await api('/api/favorites');
+                const data = await response.json();
+                favorites = data.favorites || [];
+                
+                // 更新统计
+                document.getElementById('videoCount').textContent = favorites.length;
+                const dirs = [...new Set(favorites.map(f => f.dirName))];
+                document.getElementById('dirCount').textContent = dirs.length;
+                
+                if (favorites.length === 0) {
+                    videoList.innerHTML = `
+                        <div class="empty-state">
+                            <h3>暂无收藏</h3>
+                            <p>在视频播放页面点击"收藏"按钮添加收藏</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // 渲染收藏列表
+                let html = '<div class="video-group"><div class="group-content">';
+                
+                favorites.forEach(video => {
+                    html += `
+                        <div class="video-item">
+                            <div class="video-info">
+                                <div class="video-path">📁 ${video.dirName}</div>
+                                <div class="video-name">${video.filename}</div>
+                                <div class="video-meta">收藏于: ${formatTimestamp(video.addedAt)}</div>
+                            </div>
+                            <a href="/player.html?id=${video.videoId}" class="watch-btn">观看</a>
+                        </div>
+                    `;
+                });
+                
+                html += '</div></div>';
+                videoList.innerHTML = html;
+                
             } catch (err) {
+                videoList.innerHTML = `
+                    <div class="empty-state">
+                        <h3>加载失败</h3>
+                        <p>${err.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 渲染视频列表
+        function renderVideoList(videos) {
+            const videoList = document.getElementById('videoList');
+            
+            if (videos.length === 0) {
+                videoList.innerHTML = `
+                    <div class="empty-state">
+                        <h3>暂无视频</h3>
+                        <p>点击"刷新扫描"按钮扫描视频目录</p>
+                    </div>
+                `;
                 return;
             }
-
-            // 加载视频列表
-            await loadVideoList();
             
-            // 轮询扫描状态
-            pollScanStatus();
-        });
+            // 按目录分组
+            const grouped = {};
+            videos.forEach(video => {
+                if (!grouped[video.dirName]) {
+                    grouped[video.dirName] = [];
+                }
+                grouped[video.dirName].push(video);
+            });
+            
+            // 获取收藏的视频ID列表
+            const favoriteIds = new Set(favorites.map(f => f.videoId));
+            
+            let html = '';
+            for (const [dirName, vids] of Object.entries(grouped)) {
+                html += `
+                    <div class="video-group">
+                        <div class="group-header" onclick="toggleGroup(this)">
+                            <span class="group-name">📁 ${dirName}</span>
+                            <span class="group-count">${vids.length} 个视频</span>
+                        </div>
+                        <div class="group-content">
+                            ${vids.map(video => {
+                                const displayPath = video.relativePath.replace(/\\\\/g, '/');
+                                const isFav = favoriteIds.has(video.id);
+                                return `
+                                    <div class="video-item">
+                                        <div class="video-info">
+                                            ${displayPath !== video.name ? `<div class="video-path">📂 ${displayPath}</div>` : ''}
+                                            <div class="video-name">${video.name} ${isFav ? '<span style="color:#ff6b6b">♥</span>' : ''}</div>
+                                            <div class="video-meta">大小: ${video.size} | 修改时间: ${video.modified}</div>
+                                        </div>
+                                        <a href="/player.html?id=${video.id}" class="watch-btn">观看</a>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            videoList.innerHTML = html;
+        }
 
         // 加载视频列表
         async function loadVideoList() {
             const videoList = document.getElementById('videoList');
             
             try {
-                const response = await api('/api/videos');
-                const data = await response.json();
+                // 并行加载视频列表和收藏列表
+                const [videosRes, favRes] = await Promise.all([
+                    api('/api/videos'),
+                    api('/api/favorites')
+                ]);
+                
+                const data = await videosRes.json();
+                const favData = await favRes.json();
+                
+                allVideos = data.videos;
+                favorites = favData.favorites || [];
                 
                 // 更新统计
                 document.getElementById('videoCount').textContent = data.videoCount;
                 document.getElementById('dirCount').textContent = data.dirCount;
                 
-                if (data.videos.length === 0) {
-                    videoList.innerHTML = `
-                        <div class="empty-state">
-                            <h3>暂无视频</h3>
-                            <p>点击"刷新扫描"按钮扫描视频目录</p>
-                        </div>
-                    `;
-                    return;
-                }
-                
-                // 按目录分组
-                const grouped = {};
-                data.videos.forEach(video => {
-                    if (!grouped[video.dirName]) {
-                        grouped[video.dirName] = [];
-                    }
-                    grouped[video.dirName].push(video);
-                });
-                
-                // 渲染视频列表
-                let html = '';
-                for (const [dirName, videos] of Object.entries(grouped)) {
-                    html += `
-                        <div class="video-group">
-                            <div class="group-header" onclick="toggleGroup(this)">
-                                <span class="group-name">📁 ${dirName}</span>
-                                <span class="group-count">${videos.length} 个视频</span>
-                            </div>
-                            <div class="group-content">
-                                ${videos.map(video => {
-                                    const displayPath = video.relativePath.replace(/\\\\/g, '/');
-                                    return `
-                                        <div class="video-item">
-                                            <div class="video-info">
-                                                ${displayPath !== video.name ? `<div class="video-path">📂 ${displayPath}</div>` : ''}
-                                                <div class="video-name">${video.name}</div>
-                                                <div class="video-meta">大小: ${video.size} | 修改时间: ${video.modified}</div>
-                                            </div>
-                                            <a href="/player.html?id=${video.id}" class="watch-btn">观看</a>
-                                        </div>
-                                    `;
-                                }).join('')}
-                            </div>
-                        </div>
-                    `;
-                }
-                
-                videoList.innerHTML = html;
+                renderVideoList(allVideos);
                 
             } catch (err) {
                 videoList.innerHTML = `
@@ -175,6 +296,25 @@
             const content = header.nextElementSibling;
             content.style.display = content.style.display === 'none' ? 'block' : 'none';
         }
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 获取当前用户信息
+            try {
+                const userRes = await api('/api/user');
+                if (!userRes.ok) throw new Error('获取用户信息失败');
+                const userData = await userRes.json();
+                document.getElementById('userBadge').textContent = `👤 ${userData.username}`;
+            } catch (err) {
+                return;
+            }
+
+            // 加载视频列表
+            await loadVideoList();
+            
+            // 轮询扫描状态
+            pollScanStatus();
+        });
     </script>
 </body>
 </html>
