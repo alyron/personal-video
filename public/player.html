@@ -5,14 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>视频播放 - 视频服务器</title>
     <link rel="stylesheet" href="/css/style.css">
-    <!-- Plyr 样式 -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css">
     <style>
         .player-actions {
             display: flex;
             align-items: center;
             gap: 10px;
             flex-wrap: wrap;
+            margin-top: 15px;
         }
         .action-btn {
             display: inline-flex;
@@ -33,10 +32,6 @@
         .download-btn:hover {
             background-color: #45a049;
         }
-        .download-btn:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
         .favorite-btn {
             background-color: #fff;
             color: #666;
@@ -51,9 +46,6 @@
             color: white;
             border-color: #ff6b6b;
         }
-        .favorite-btn.active:hover {
-            background-color: #ee5a5a;
-        }
         .download-progress {
             font-size: 12px;
             color: #666;
@@ -63,33 +55,14 @@
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            --plyr-color-main: #667eea;
-            max-height: calc(100vh - 200px);
         }
-        .video-wrapper video,
-        .video-wrapper .plyr {
+        .video-wrapper video {
+            width: 100%;
+            display: block;
             max-height: calc(100vh - 200px);
-        }
-        /* 全屏模式下移除所有限制 */
-        .dplayer-fulled,
-        .dplayer-fulled video,
-        .dplayer-fulled .dplayer-video-wrap,
-        html:has(.plyr--fullscreen-active) .video-wrapper,
-        html:has(.plyr--fullscreen-active) .video-wrapper video,
-        html:has(.plyr--fullscreen-active) .plyr,
-        html:has(.plyr--fullscreen-active) .plyr video,
-        html:has(.plyr--fullscreen-active) .plyr__video-wrapper {
-            max-height: none !important;
-            max-width: none !important;
-            height: 100% !important;
-            width: 100% !important;
         }
         @media (max-width: 768px) {
-            .video-wrapper {
-                max-height: calc(100vh - 160px);
-            }
-            .video-wrapper video,
-            .video-wrapper .plyr {
+            .video-wrapper video {
                 max-height: calc(100vh - 160px);
             }
         }
@@ -101,235 +74,7 @@
             font-size: 12px;
             color: #856404;
             display: none;
-            flex-shrink: 0;
-        }
-
-        /* 移动端独立进度条 */
-        .mobile-progress-container {
-            display: none;
-            background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
-            padding: 12px 16px;
-            border-radius: 8px;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
-            flex-shrink: 0;
-        }
-
-        /* 全屏模式下进度条固定在底部 */
-        .mobile-progress-container.fullscreen-mode {
-            position: fixed !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            z-index: 2147483647 !important;
-            margin-top: 0 !important;
-            border-radius: 0 !important;
-            background: linear-gradient(180deg, rgba(42, 42, 42, 0.95) 0%, rgba(26, 26, 26, 0.98) 100%);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-
-        .mobile-progress-container.fullscreen-mode .mobile-progress-bar::-webkit-slider-thumb {
-            width: 28px;
-            height: 28px;
-            margin-top: -11px;
-        }
-
-        .mobile-progress-container.fullscreen-mode .mobile-progress-bar::-moz-range-thumb {
-            width: 28px;
-            height: 28px;
-        }
-
-        .mobile-progress-wrapper {
-            position: relative;
-            padding: 6px 0;
-        }
-
-        /* 缓冲进度条背景 */
-        .mobile-buffer-bar {
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 6px;
-            transform: translateY(-50%);
-            background: rgba(255,255,255,0.1);
-            border-radius: 3px;
-            pointer-events: none;
-        }
-
-        .mobile-progress-bar {
-            width: 100%;
-            height: 30px;
-            -webkit-appearance: none;
-            appearance: none;
-            background: transparent;
-            cursor: pointer;
-            position: relative;
-            z-index: 2;
-        }
-
-        .mobile-progress-bar::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 6px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 3px;
-            border: none;
-        }
-
-        .mobile-progress-bar::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 22px;
-            height: 22px;
-            background: linear-gradient(135deg, #7c8df7 0%, #667eea 100%);
-            border-radius: 50%;
-            margin-top: -8px;
-            cursor: pointer;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5),
-                        0 0 0 3px rgba(102, 126, 234, 0.2);
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-
-        .mobile-progress-bar::-webkit-slider-thumb:hover {
-            transform: scale(1.1);
-            box-shadow: 0 2px 12px rgba(102, 126, 234, 0.6),
-                        0 0 0 5px rgba(102, 126, 234, 0.25);
-        }
-
-        .mobile-progress-bar::-webkit-slider-thumb:active {
-            transform: scale(1.15);
-            box-shadow: 0 2px 16px rgba(102, 126, 234, 0.7),
-                        0 0 0 6px rgba(102, 126, 234, 0.3);
-        }
-
-        .mobile-progress-bar::-moz-range-track {
-            width: 100%;
-            height: 6px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 3px;
-        }
-
-        .mobile-progress-bar::-moz-range-thumb {
-            width: 22px;
-            height: 22px;
-            background: linear-gradient(135deg, #7c8df7 0%, #667eea 100%);
-            border-radius: 50%;
-            border: none;
-            cursor: pointer;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
-        }
-
-        .mobile-progress-bar::-moz-range-progress {
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            border-radius: 3px;
-        }
-
-        .mobile-time-display {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: rgba(255,255,255,0.7);
-            font-size: 12px;
-            font-weight: 500;
-            margin-top: 4px;
-            padding: 0 2px;
-        }
-
-        .mobile-time-display span {
-            font-variant-numeric: tabular-nums;
-        }
-
-        /* 桌面端进度条样式 */
-        .plyr__progress input[type="range"]::-webkit-slider-thumb {
-            width: 16px !important;
-            height: 16px !important;
-            margin-top: -5px !important;
-        }
-
-        .plyr__progress input[type="range"]::-moz-range-thumb {
-            width: 16px !important;
-            height: 16px !important;
-        }
-
-        /* 全屏模式下增大 Plyr 进度条 */
-        .plyr--fullscreen-active .plyr__progress {
-            height: 12px !important;
-        }
-
-        .plyr--fullscreen-active .plyr__progress input[type="range"]::-webkit-slider-thumb {
-            width: 28px !important;
-            height: 28px !important;
-            margin-top: -9px !important;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5),
-                        0 0 0 4px rgba(102, 126, 234, 0.2) !important;
-        }
-
-        .plyr--fullscreen-active .plyr__progress input[type="range"]::-moz-range-thumb {
-            width: 28px !important;
-            height: 28px !important;
-        }
-
-        .plyr--fullscreen-active .plyr__control {
-            padding: 12px !important;
-        }
-
-        .plyr--fullscreen-active .plyr__control svg {
-            width: 24px !important;
-            height: 24px !important;
-        }
-
-        /* 移动端隐藏 Plyr 进度条，显示独立进度条 */
-        @media (max-width: 768px) {
-            .mobile-progress-container {
-                display: block;
-            }
-
-            .plyr__progress__container {
-                display: none !important;
-            }
-
-            /* 控制按钮样式 */
-            .plyr__control {
-                padding: 8px 6px !important;
-            }
-
-            .plyr__control svg {
-                width: 20px !important;
-                height: 20px !important;
-            }
-
-            .plyr__time {
-                font-size: 12px !important;
-            }
-
-            .action-btn {
-                padding: 6px 12px;
-                font-size: 13px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .mobile-progress-container {
-                padding: 10px 12px;
-            }
-
-            .mobile-progress-wrapper {
-                padding: 8px 0;
-            }
-
-            .mobile-progress-bar::-webkit-slider-thumb {
-                width: 26px;
-                height: 26px;
-                margin-top: -10px;
-            }
-
-            .mobile-progress-bar::-moz-range-thumb {
-                width: 26px;
-                height: 26px;
-            }
-
-            .mobile-time-display {
-                font-size: 11px;
-            }
+            margin-bottom: 10px;
         }
     </style>
 </head>
@@ -349,21 +94,9 @@
             </div>
 
             <div class="video-wrapper">
-                <video id="videoPlayer" controls crossorigin playsinline>
+                <video id="videoPlayer" controls playsinline crossorigin>
                     您的浏览器不支持视频播放
                 </video>
-            </div>
-
-            <!-- 移动端独立进度条 -->
-            <div class="mobile-progress-container" id="mobileProgress">
-                <div class="mobile-progress-wrapper">
-                    <div class="mobile-buffer-bar" id="mobileBufferBar"></div>
-                    <input type="range" class="mobile-progress-bar" id="mobileProgressBar" min="0" max="100" value="0" step="0.1">
-                </div>
-                <div class="mobile-time-display">
-                    <span id="mobileCurrentTime">0:00</span>
-                    <span id="mobileDuration">0:00</span>
-                </div>
             </div>
 
             <div class="player-actions">
@@ -378,36 +111,32 @@
         </div>
     </div>
 
-    <!-- Plyr 脚本 -->
-    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js"></script>
-
     <script>
         let currentVideoId = null;
         let currentFilename = null;
         let currentDirName = null;
         let currentContentType = null;
         let isFavorite = false;
-        let player = null;
 
         // 统一 API 请求处理
         async function api(url, options = {}) {
-            const response = await fetch(url, { 
+            const response = await fetch(url, {
                 ...options,
                 credentials: 'same-origin'
             });
-            
+
             if (response.status === 401) {
                 window.location.href = '/login.html';
                 throw new Error('未登录');
             }
-            
+
             return response;
         }
 
         // 检查收藏状态
         async function checkFavorite() {
             if (!currentVideoId) return;
-            
+
             try {
                 const response = await api(`/api/favorite/check/${currentVideoId}`);
                 const data = await response.json();
@@ -423,7 +152,7 @@
             const btn = document.getElementById('favoriteBtn');
             const icon = document.getElementById('favoriteIcon');
             const text = document.getElementById('favoriteText');
-            
+
             if (isFavorite) {
                 icon.textContent = '♥';
                 text.textContent = '已收藏';
@@ -438,10 +167,10 @@
         // 切换收藏状态
         async function toggleFavorite() {
             if (!currentVideoId) return;
-            
+
             const btn = document.getElementById('favoriteBtn');
             btn.disabled = true;
-            
+
             try {
                 if (isFavorite) {
                     const response = await api(`/api/favorite/${currentVideoId}`, {
@@ -476,24 +205,22 @@
             }
         }
 
-        // 下载视频 - 直接使用浏览器原生下载，避免大文件内存溢出
+        // 下载视频
         async function downloadVideo() {
             if (!currentVideoId) return;
-            
+
             const progress = document.getElementById('downloadProgress');
-            
+
             try {
-                // 先检查登录状态
                 const checkRes = await fetch('/api/videos', { method: 'HEAD' });
                 if (checkRes.status === 401) {
                     alert('登录已过期，请重新登录');
                     window.location.href = '/login.html';
                     return;
                 }
-                
+
                 progress.textContent = '已开始下载，请查看浏览器下载管理器';
-                
-                // 使用隐藏 iframe 进行下载，避免页面导航
+
                 const downloadUrl = `/api/download/${currentVideoId}`;
                 let iframe = document.getElementById('downloadIframe');
                 if (!iframe) {
@@ -503,8 +230,7 @@
                     document.body.appendChild(iframe);
                 }
                 iframe.src = downloadUrl;
-                
-                // 10秒后清除提示
+
                 setTimeout(() => {
                     progress.textContent = '';
                 }, 10000);
@@ -514,183 +240,61 @@
             }
         }
 
-        function formatSize(bytes) {
-            if (bytes < 1024) return bytes + ' B';
-            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
-        }
-
-        // 格式化时间
-        function formatTime(seconds) {
-            if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins}:${secs.toString().padStart(2, '0')}`;
-        }
-
-        // 初始化移动端进度条
-        function initMobileProgress() {
-            const video = document.getElementById('videoPlayer');
-            const progressBar = document.getElementById('mobileProgressBar');
-            const bufferBar = document.getElementById('mobileBufferBar');
-            const currentTimeEl = document.getElementById('mobileCurrentTime');
-            const durationEl = document.getElementById('mobileDuration');
-
-            // 视频加载元数据
-            video.addEventListener('loadedmetadata', () => {
-                durationEl.textContent = formatTime(video.duration);
-                progressBar.max = video.duration;
-            });
-
-            // 视频播放时更新进度
-            video.addEventListener('timeupdate', () => {
-                if (!progressBar.dataset.seeking) {
-                    progressBar.value = video.currentTime;
-                }
-                currentTimeEl.textContent = formatTime(video.currentTime);
-            });
-
-            // 更新缓冲进度
-            video.addEventListener('progress', () => {
-                if (video.buffered.length > 0) {
-                    const bufferedEnd = video.buffered.end(video.buffered.length - 1);
-                    const duration = video.duration || 1;
-                    const percent = (bufferedEnd / duration) * 100;
-                    bufferBar.style.background = `linear-gradient(to right, rgba(102, 126, 234, 0.4) 0%, rgba(102, 126, 234, 0.4) ${percent}%, rgba(255,255,255,0.1) ${percent}%, rgba(255,255,255,0.1) 100%)`;
-                }
-            });
-
-            // 进度条拖动
-            progressBar.addEventListener('input', (e) => {
-                progressBar.dataset.seeking = 'true';
-                currentTimeEl.textContent = formatTime(e.target.value);
-            });
-
-            // 进度条释放
-            progressBar.addEventListener('change', (e) => {
-                delete progressBar.dataset.seeking;
-                video.currentTime = e.target.value;
-            });
-        }
-
         // 初始化播放器
-        function initPlayer(videoUrl) {
+        function initPlayer(url) {
             const video = document.getElementById('videoPlayer');
-            video.src = videoUrl;
+            video.src = url;
 
             // 对于 MKV/AVI 等格式，显示提示
             const limitedFormats = ['video/x-matroska', 'video/x-msvideo'];
             if (limitedFormats.includes(currentContentType)) {
                 document.getElementById('formatTip').style.display = 'block';
             }
-
-            // 初始化 Plyr
-            player = new Plyr(video, {
-                controls: [
-                    'play-large',
-                    'rewind',
-                    'play',
-                    'fast-forward',
-                    'progress',
-                    'current-time',
-                    'duration',
-                    'mute',
-                    'volume',
-                    'settings',
-                    'fullscreen'
-                ],
-                settings: ['speed'],
-                speed: {
-                    selected: 1,
-                    options: [0.5, 0.75, 1, 1.25, 1.5, 2]
-                },
-                autoplay: true,
-                volume: 0.7
-            });
-
-            player.on('error', (e) => {
-                console.error('播放错误:', e);
-            });
-
-            // 全屏状态切换处理
-            player.on('enterfullscreen', () => {
-                // 全屏时移除视频的高度限制，让视频填满屏幕
-                video.style.maxHeight = 'none';
-                video.style.maxWidth = 'none';
-                const plyrEl = document.querySelector('.plyr');
-                if (plyrEl) {
-                    plyrEl.style.maxHeight = 'none';
-                }
-                if (window.innerWidth <= 768) {
-                    const mobileProgress = document.getElementById('mobileProgress');
-                    mobileProgress.classList.add('fullscreen-mode');
-                    mobileProgress.style.display = 'block';
-                }
-            });
-
-            player.on('exitfullscreen', () => {
-                // 恢复视频的高度限制
-                video.style.maxHeight = 'calc(100vh - 200px)';
-                video.style.maxWidth = '100%';
-                const plyrEl = document.querySelector('.plyr');
-                if (plyrEl) {
-                    plyrEl.style.maxHeight = 'calc(100vh - 200px)';
-                }
-                const mobileProgress = document.getElementById('mobileProgress');
-                mobileProgress.classList.remove('fullscreen-mode');
-                if (window.innerWidth <= 768) {
-                    mobileProgress.style.display = 'block';
-                }
-            });
-
-            // 初始化移动端进度条
-            initMobileProgress();
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
             const urlParams = new URLSearchParams(window.location.search);
             const videoId = urlParams.get('id');
-            
+
             const dirBadge = document.getElementById('dirBadge');
             const videoTitle = document.getElementById('videoTitle');
             const downloadBtn = document.getElementById('downloadBtn');
             const favoriteBtn = document.getElementById('favoriteBtn');
-            
+
             if (!videoId) {
                 videoTitle.textContent = '视频ID无效';
                 dirBadge.textContent = '❌ 错误';
                 return;
             }
-            
+
             currentVideoId = videoId;
             downloadBtn.style.display = 'inline-flex';
             favoriteBtn.style.display = 'inline-flex';
-            
+
             downloadBtn.addEventListener('click', downloadVideo);
             favoriteBtn.addEventListener('click', toggleFavorite);
-            
+
             try {
                 const response = await api(`/api/video-info?id=${videoId}`);
-                
+
                 if (!response.ok) {
                     throw new Error('获取视频信息失败');
                 }
-                
+
                 const info = await response.json();
-                
+
                 dirBadge.textContent = `📁 ${info.dirName}`;
                 videoTitle.textContent = info.filename;
                 currentFilename = info.filename;
                 currentDirName = info.dirName;
                 currentContentType = info.contentType;
-                
+
                 // 初始化播放器
                 initPlayer(`/api/stream/${videoId}`);
-                
+
                 // 检查收藏状态
                 await checkFavorite();
-                
+
             } catch (err) {
                 console.error('加载视频信息失败:', err);
                 videoTitle.textContent = '加载失败';
