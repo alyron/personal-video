@@ -82,6 +82,12 @@
             </div>
             <div class="quick-nav" id="quickNav" style="display: none;"></div>
         </div>
+        <!-- 全局页面滚动条滑块 -->
+        <div class="page-slider" id="pageSlider">
+            <div class="page-slider-track">
+                <div class="page-slider-thumb" id="pageSliderThumb"></div>
+            </div>
+        </div>
         <div class="quick-nav-tooltip" id="quickNavTooltip"></div>
     </main>
 
@@ -174,7 +180,7 @@
                 
                 html += '</div></div>';
                 videoList.innerHTML = html;
-                
+
             } catch (err) {
                 videoList.innerHTML = `
                     <div class="empty-state">
@@ -247,7 +253,7 @@
             }
             
             videoList.innerHTML = html;
-            
+
             // 生成快速导航滑块
             renderQuickNav(dirNames);
         }
@@ -448,6 +454,122 @@
             content.style.display = content.style.display === 'none' ? 'block' : 'none';
         }
 
+        // 全局页面滚动条滑块
+        function initPageSlider() {
+            const pageSlider = document.getElementById('pageSlider');
+            const thumb = document.getElementById('pageSliderThumb');
+
+            let isDragging = false;
+
+            function updateThumb() {
+                const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+                const maxScroll = scrollHeight - clientHeight;
+
+                if (maxScroll <= 10) {
+                    pageSlider.style.display = 'none';
+                    return;
+                }
+
+                pageSlider.style.display = 'block';
+                const percentage = scrollTop / maxScroll;
+                const trackHeight = pageSlider.clientHeight;
+                const thumbHeight = Math.max(40, (clientHeight / scrollHeight) * trackHeight);
+                const maxThumbTop = trackHeight - thumbHeight;
+                const thumbTop = percentage * maxThumbTop;
+
+                thumb.style.height = thumbHeight + 'px';
+                thumb.style.top = thumbTop + 'px';
+            }
+
+            // 监听页面滚动
+            window.addEventListener('scroll', () => {
+                if (!isDragging) {
+                    updateThumb();
+                }
+            });
+
+            // 滑块拖动
+            thumb.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                thumb.classList.add('dragging');
+                pageSlider.classList.add('dragging');
+                document.body.style.userSelect = 'none';
+            });
+
+            // 点击轨道跳转
+            pageSlider.addEventListener('mousedown', (e) => {
+                if (e.target === pageSlider || e.target === thumb.parentElement) {
+                    const rect = pageSlider.getBoundingClientRect();
+                    const relativeY = e.clientY - rect.top;
+                    const percentage = relativeY / rect.height;
+                    const maxScroll = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                    window.scrollTo(0, percentage * maxScroll);
+                    updateThumb();
+                }
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+
+                const rect = pageSlider.getBoundingClientRect();
+                const relativeY = e.clientY - rect.top;
+                const percentage = Math.max(0, Math.min(1, relativeY / rect.height));
+                const maxScroll = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                window.scrollTo(0, percentage * maxScroll);
+                updateThumb();
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                thumb.classList.remove('dragging');
+                pageSlider.classList.remove('dragging');
+                document.body.style.userSelect = '';
+            });
+
+            // 触摸事件支持
+            thumb.addEventListener('touchstart', (e) => {
+                isDragging = true;
+                thumb.classList.add('dragging');
+                pageSlider.classList.add('dragging');
+            }, { passive: true });
+
+            pageSlider.addEventListener('touchstart', (e) => {
+                if (e.target === pageSlider || e.target === thumb.parentElement) {
+                    const rect = pageSlider.getBoundingClientRect();
+                    const touch = e.touches[0];
+                    const relativeY = touch.clientY - rect.top;
+                    const percentage = relativeY / rect.height;
+                    const maxScroll = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                    window.scrollTo(0, percentage * maxScroll);
+                    updateThumb();
+                }
+            }, { passive: true });
+
+            document.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+
+                const rect = pageSlider.getBoundingClientRect();
+                const touch = e.touches[0];
+                const relativeY = touch.clientY - rect.top;
+                const percentage = Math.max(0, Math.min(1, relativeY / rect.height));
+                const maxScroll = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                window.scrollTo(0, percentage * maxScroll);
+                updateThumb();
+            }, { passive: true });
+
+            document.addEventListener('touchend', () => {
+                isDragging = false;
+                thumb.classList.remove('dragging');
+                pageSlider.classList.remove('dragging');
+            });
+
+            // 窗口大小变化时更新
+            window.addEventListener('resize', updateThumb);
+
+            // 初始更新
+            updateThumb();
+        }
+
         // 页面初始化
         document.addEventListener('DOMContentLoaded', async () => {
             // 获取当前用户信息
@@ -462,7 +584,10 @@
 
             // 加载视频列表
             await loadVideoList();
-            
+
+            // 初始化全局页面滚动条滑块
+            initPageSlider();
+
             // 轮询扫描状态
             pollScanStatus();
         });
