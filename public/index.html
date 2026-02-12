@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频列表 - 视频服务器</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header class="header">
+        <h1 class="header-title">📹 视频服务器</h1>
+        <div class="header-info">
+            <span class="user-badge" id="userBadge">👤 加载中...</span>
+            <button id="refreshBtn" class="refresh-btn">刷新扫描</button>
+            <a href="/api/logout" class="logout-btn">退出登录</a>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-number" id="videoCount">0</div>
+                <div class="stat-label">视频总数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="dirCount">0</div>
+                <div class="stat-label">目录数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label" id="scanStatus">检查状态中...</div>
+            </div>
+        </div>
+
+        <div class="video-list" id="videoList">
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>加载中...</p>
+            </div>
+        </div>
+    </main>
+
+    <script src="/js/app.js"></script>
+    <script>
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 获取当前用户信息
+            try {
+                const userRes = await fetch('/api/user');
+                if (userRes.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                const userData = await userRes.json();
+                document.getElementById('userBadge').textContent = `👤 ${userData.username}`;
+            } catch (err) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            // 加载视频列表
+            await loadVideoList();
+            
+            // 轮询扫描状态
+            pollScanStatus();
+        });
+
+        // 加载视频列表
+        async function loadVideoList() {
+            const videoList = document.getElementById('videoList');
+            
+            try {
+                const response = await fetch('/api/videos');
+                const data = await response.json();
+                
+                // 更新统计
+                document.getElementById('videoCount').textContent = data.videoCount;
+                document.getElementById('dirCount').textContent = data.dirCount;
+                
+                if (data.videos.length === 0) {
+                    videoList.innerHTML = `
+                        <div class="empty-state">
+                            <h3>暂无视频</h3>
+                            <p>点击"刷新扫描"按钮扫描视频目录</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // 按目录分组
+                const grouped = {};
+                data.videos.forEach(video => {
+                    if (!grouped[video.dirName]) {
+                        grouped[video.dirName] = [];
+                    }
+                    grouped[video.dirName].push(video);
+                });
+                
+                // 渲染视频列表
+                let html = '';
+                for (const [dirName, videos] of Object.entries(grouped)) {
+                    html += `
+                        <div class="video-group">
+                            <div class="group-header" onclick="toggleGroup(this)">
+                                <span class="group-name">📁 ${dirName}</span>
+                                <span class="group-count">${videos.length} 个视频</span>
+                            </div>
+                            <div class="group-content">
+                                ${videos.map(video => {
+                                    const displayPath = video.relativePath.replace(/\\\\/g, '/');
+                                    return `
+                                        <div class="video-item">
+                                            <div class="video-info">
+                                                ${displayPath !== video.name ? `<div class="video-path">📂 ${displayPath}</div>` : ''}
+                                                <div class="video-name">${video.name}</div>
+                                                <div class="video-meta">大小: ${video.size} | 修改时间: ${video.modified}</div>
+                                            </div>
+                                            <a href="/player.html?id=${video.id}" class="watch-btn">观看</a>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                videoList.innerHTML = html;
+                
+            } catch (err) {
+                videoList.innerHTML = `
+                    <div class="empty-state">
+                        <h3>加载失败</h3>
+                        <p>${err.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 刷新扫描
+        document.getElementById('refreshBtn').addEventListener('click', async function() {
+            this.disabled = true;
+            this.textContent = '扫描中...';
+            
+            try {
+                const response = await fetch('/api/scan', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadVideoList();
+                } else {
+                    alert('扫描失败: ' + result.error);
+                }
+            } catch (err) {
+                alert('请求失败: ' + err.message);
+            } finally {
+                this.disabled = false;
+                this.textContent = '刷新扫描';
+            }
+        });
+
+        // 切换目录展开/收起
+        function toggleGroup(header) {
+            const content = header.nextElementSibling;
+            content.style.display = content.style.display === 'none' ? 'block' : 'none';
+        }
+    </script>
+</body>
+</html>

@@ -10,6 +10,26 @@ const videoIdManager = require('../utils/videoId');
 const { requireAuth } = require('../middleware/auth');
 
 /**
+ * 获取视频列表
+ */
+router.get('/videos', requireAuth, (req, res) => {
+  const videos = videoCache.getVideos();
+  const dirGroups = [...new Set(videos.map(v => v.dirName))];
+  
+  // 为每个视频添加 ID
+  const videosWithId = videos.map(video => ({
+    ...video,
+    id: videoIdManager.getVideoId(video.dirName, video.relativePath)
+  }));
+  
+  res.json({
+    videos: videosWithId,
+    videoCount: videos.length,
+    dirCount: dirGroups.length
+  });
+});
+
+/**
  * 手动扫描
  */
 router.post('/scan', requireAuth, async (req, res) => {
@@ -29,16 +49,16 @@ router.get('/scan-status', requireAuth, (req, res) => {
 });
 
 /**
- * 视频信息
+ * 视频信息 (改为 GET 请求)
  */
-router.post('/video-info', requireAuth, (req, res) => {
-  const { videoId } = req.body;
+router.get('/video-info', requireAuth, (req, res) => {
+  const { id } = req.query;
   
-  if (!videoId) {
-    return res.status(400).json({ error: '缺少 videoId 参数' });
+  if (!id) {
+    return res.status(400).json({ error: '缺少 id 参数' });
   }
   
-  const info = videoStream.getVideoInfo(videoId);
+  const info = videoStream.getVideoInfo(id);
   if (!info) {
     return res.status(404).json({ error: '视频不存在或已过期' });
   }
