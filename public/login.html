@@ -9,7 +9,7 @@
 </head>
 <body class="login-page">
     <div class="login-container">
-        <h1>视频服务器</h1>
+        <h1>服务器</h1>
         
         <!-- 登录方式切换 -->
         <div class="login-tabs">
@@ -18,14 +18,14 @@
         </div>
         
         <!-- 密码登录表单 -->
-        <form id="loginForm" class="login-form active">
+        <form id="loginForm" class="login-form active" action="/api/login" method="POST" autocomplete="on">
             <div class="form-group">
                 <label for="username">用户名</label>
-                <input type="text" id="username" name="username" required autofocus>
+                <input type="text" id="username" name="username" required autofocus autocomplete="username">
             </div>
             <div class="form-group">
                 <label for="password">密码</label>
-                <input type="password" id="password" name="password" required>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
             </div>
             <p class="error-message" id="errorMsg" style="display: none;"></p>
             <button type="submit" class="login-btn">登录</button>
@@ -77,6 +77,25 @@
             document.getElementById('errorMsg').textContent = '用户名或密码错误';
             document.getElementById('errorMsg').style.display = 'block';
         }
+        
+        // 自动填充已保存的凭据
+        async function autoFillCredentials() {
+            if (navigator.credentials) {
+                try {
+                    const credential = await navigator.credentials.get({
+                        password: true,
+                        mediation: 'silent'
+                    });
+                    if (credential) {
+                        document.getElementById('username').value = credential.id;
+                        document.getElementById('password').focus();
+                    }
+                } catch (e) {
+                    // 忽略错误
+                }
+            }
+        }
+        autoFillCredentials();
 
         // 登录表单提交
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -97,6 +116,8 @@
                 const result = await response.json();
 
                 if (result.success) {
+                    // 触发浏览器保存密码
+                    saveCredentials(username, password);
                     window.location.href = '/';
                 } else {
                     errorMsg.textContent = result.error || '登录失败';
@@ -107,6 +128,21 @@
                 errorMsg.style.display = 'block';
             }
         });
+        
+        // 触发浏览器保存密码 (使用 Credential Management API)
+        async function saveCredentials(username, password) {
+            if (window.PasswordCredential) {
+                try {
+                    const credential = new PasswordCredential({
+                        id: username,
+                        password: password
+                    });
+                    await navigator.credentials.store(credential);
+                } catch (e) {
+                    // 忽略错误，不影响登录流程
+                }
+            }
+        }
         
         // ==================== 扫码登录 ====================
         let qrcodeInstance = null;

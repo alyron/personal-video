@@ -16,15 +16,15 @@
         </div>
         
         <!-- 确认表单 -->
-        <form id="confirmForm" class="login-form" style="display: none;">
+        <form id="confirmForm" class="login-form" style="display: none;" autocomplete="on">
             <p class="confirm-hint">请在下方输入密码确认登录</p>
             <div class="form-group">
                 <label for="username">用户名</label>
-                <input type="text" id="username" name="username" required>
+                <input type="text" id="username" name="username" required autocomplete="username">
             </div>
             <div class="form-group">
                 <label for="password">密码</label>
-                <input type="password" id="password" name="password" required autofocus>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
             </div>
             <p class="error-message" id="errorMsg" style="display: none;"></p>
             <div class="confirm-buttons">
@@ -64,11 +64,32 @@
                     // 显示确认表单
                     document.getElementById('statusArea').style.display = 'none';
                     document.getElementById('confirmForm').style.display = 'block';
+                    
+                    // 尝试自动填充已保存的凭据
+                    autoFillCredentials();
                 } else {
                     showError(result.error || '二维码无效');
                 }
             } catch (err) {
                 showError('网络错误，请重试');
+            }
+        }
+        
+        // 自动填充已保存的凭据
+        async function autoFillCredentials() {
+            if (navigator.credentials) {
+                try {
+                    const credential = await navigator.credentials.get({
+                        password: true,
+                        mediation: 'silent'
+                    });
+                    if (credential) {
+                        document.getElementById('username').value = credential.id;
+                        document.getElementById('password').focus();
+                    }
+                } catch (e) {
+                    // 忽略错误
+                }
             }
         }
         
@@ -90,6 +111,8 @@
                 const result = await response.json();
                 
                 if (result.success) {
+                    // 触发浏览器保存密码
+                    saveCredentials(username, password);
                     document.getElementById('confirmForm').style.display = 'none';
                     document.getElementById('successArea').style.display = 'block';
                 } else {
@@ -101,6 +124,21 @@
                 errorMsg.style.display = 'block';
             }
         });
+        
+        // 触发浏览器保存密码 (使用 Credential Management API)
+        async function saveCredentials(username, password) {
+            if (window.PasswordCredential) {
+                try {
+                    const credential = new PasswordCredential({
+                        id: username,
+                        password: password
+                    });
+                    await navigator.credentials.store(credential);
+                } catch (e) {
+                    // 忽略错误
+                }
+            }
+        }
         
         // 取消登录
         document.getElementById('cancelBtn').addEventListener('click', async () => {
