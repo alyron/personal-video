@@ -5,11 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>登录</title>
     <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body class="login-page">
     <div class="login-container">
-        <h1>测试服务器</h1>
-        <form id="loginForm">
+        <h1>视频服务器</h1>
+        
+        <!-- 登录方式切换 -->
+        <div class="login-tabs">
+            <button class="login-tab active" data-tab="password">密码登录</button>
+            <button class="login-tab" data-tab="qrcode">扫码登录</button>
+        </div>
+        
+        <!-- 密码登录表单 -->
+        <form id="loginForm" class="login-form active">
             <div class="form-group">
                 <label for="username">用户名</label>
                 <input type="text" id="username" name="username" required autofocus>
@@ -21,8 +30,47 @@
             <p class="error-message" id="errorMsg" style="display: none;"></p>
             <button type="submit" class="login-btn">登录</button>
         </form>
+        
+        <!-- 扫码登录区域 -->
+        <div id="qrcodeForm" class="login-form">
+            <div class="qrcode-wrapper">
+                <div id="qrcodeContainer" class="qrcode-box">
+                    <div class="loading-spinner"></div>
+                </div>
+                <div id="qrcodeStatus" class="qrcode-status">
+                    <p>请使用手机扫描二维码登录</p>
+                </div>
+            </div>
+            <p class="error-message" id="qrErrorMsg" style="display: none;"></p>
+            <button type="button" class="login-btn refresh-qrcode" id="refreshQR" style="display: none;">
+                刷新二维码
+            </button>
+        </div>
     </div>
+    
     <script>
+        // 登录方式切换
+        const tabs = document.querySelectorAll('.login-tab');
+        const passwordForm = document.getElementById('loginForm');
+        const qrcodeForm = document.getElementById('qrcodeForm');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                if (tab.dataset.tab === 'password') {
+                    passwordForm.classList.add('active');
+                    qrcodeForm.classList.remove('active');
+                    stopQRCodePolling();
+                } else {
+                    passwordForm.classList.remove('active');
+                    qrcodeForm.classList.add('active');
+                    initQRCode();
+                }
+            });
+        });
+        
         // 检查URL参数中的错误
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('error')) {
@@ -59,6 +107,133 @@
                 errorMsg.style.display = 'block';
             }
         });
+        
+        // ==================== 扫码登录 ====================
+        let qrcodeInstance = null;
+        let pollingTimer = null;
+        let currentToken = null;
+        
+        // 生成二维码
+        async function initQRCode() {
+            const container = document.getElementById('qrcodeContainer');
+            const status = document.getElementById('qrcodeStatus');
+            const refreshBtn = document.getElementById('refreshQR');
+            const errorMsg = document.getElementById('qrErrorMsg');
+            
+            // 重置状态
+            errorMsg.style.display = 'none';
+            refreshBtn.style.display = 'none';
+            container.innerHTML = '<div class="loading-spinner"></div>';
+            status.innerHTML = '<p>正在生成二维码...</p>';
+            
+            try {
+                // 创建二维码token
+                const response = await fetch('/api/qrcode/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error('生成二维码失败');
+                }
+                
+                currentToken = result.token;
+                
+                // 构建扫码URL
+                const qrUrl = `${window.location.origin}/qr-confirm/${result.token}`;
+                
+                // 生成二维码
+                container.innerHTML = '';
+                qrcodeInstance = new QRCode(container, {
+                    text: qrUrl,
+                    width: 200,
+                    height: 200,
+                    colorDark: '#333333',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+                
+                status.innerHTML = '<p>请使用手机扫描二维码登录</p>';
+                
+                // 开始轮询状态
+                startQRCodePolling(result.token);
+                
+            } catch (err) {
+                container.innerHTML = '';
+                status.innerHTML = '<p class="error-text">生成二维码失败</p>';
+                refreshBtn.style.display = 'block';
+            }
+        }
+        
+        // 轮询二维码状态
+        function startQRCodePolling(token) {
+            stopQRCodePolling();
+            
+            pollingTimer = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/qrcode/status/${token}`);
+                    const result = await response.json();
+                    
+                    const status = document.getElementById('qrcodeStatus');
+                    const refreshBtn = document.getElementById('refreshQR');
+                    
+                    if (!result.success) {
+                        status.innerHTML = '<p class="error-text">二维码已失效</p>';
+                        refreshBtn.style.display = 'block';
+                        stopQRCodePolling();
+                        return;
+                    }
+                    
+                    switch (result.status) {
+                        case 'pending':
+                            // 等待扫码
+                            break;
+                        case 'scanned':
+                            status.innerHTML = '<p class="success-text">已扫描，请在手机上确认登录</p>';
+                            break;
+                        case 'confirmed':
+                            status.innerHTML = '<p class="success-text">登录成功，正在跳转...</p>';
+                            stopQRCodePolling();
+                            // 设置sessionId cookie
+                            document.cookie = `sessionId=${result.sessionId}; path=/; max-age=${7 * 24 * 60 * 60}`;
+                            // 跳转首页
+                            setTimeout(() => {
+                                window.location.href = '/';
+                            }, 500);
+                            break;
+                        case 'cancelled':
+                            status.innerHTML = '<p class="error-text">已取消登录</p>';
+                            refreshBtn.style.display = 'block';
+                            stopQRCodePolling();
+                            break;
+                        case 'expired':
+                            status.innerHTML = '<p class="error-text">二维码已过期</p>';
+                            refreshBtn.style.display = 'block';
+                            stopQRCodePolling();
+                            break;
+                    }
+                } catch (err) {
+                    console.error('轮询状态失败:', err);
+                }
+            }, 1500); // 每1.5秒轮询一次
+        }
+        
+        // 停止轮询
+        function stopQRCodePolling() {
+            if (pollingTimer) {
+                clearInterval(pollingTimer);
+                pollingTimer = null;
+            }
+        }
+        
+        // 刷新二维码
+        document.getElementById('refreshQR').addEventListener('click', () => {
+            initQRCode();
+        });
+        
+        // 页面卸载时停止轮询
+        window.addEventListener('beforeunload', stopQRCodePolling);
     </script>
 </body>
 </html>
