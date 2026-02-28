@@ -284,7 +284,7 @@ body {
     font-size: 14px;
 }
 
-.refresh-btn, .logout-btn {
+.refresh-btn, .logout-btn, .pin-btn {
     padding: 8px 16px;
     border: none;
     border-radius: 4px;
@@ -306,6 +306,15 @@ body {
 .refresh-btn:disabled {
     background-color: #ccc;
     cursor: not-allowed;
+}
+
+.pin-btn {
+    background-color: #667eea;
+    color: white;
+}
+
+.pin-btn:hover {
+    background-color: #5a6fd8;
 }
 
 .logout-btn {
@@ -766,4 +775,166 @@ body:hover .page-slider,
     .player-actions {
         gap: 8px;
     }
+
+    /* PIN码登录移动端适配 */
+    .login-tabs {
+        flex-wrap: wrap;
+    }
+
+    .login-tab {
+        font-size: 13px;
+        padding: 8px;
+    }
+
+    .pin-input {
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
+    }
+}
+
+/* ===== PIN码登录 ===== */
+.pin-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 0;
+}
+
+.pin-icon {
+    color: #667eea;
+    margin-bottom: 15px;
+}
+
+.pin-description {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.pin-input-group {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.pin-input {
+    width: 56px;
+    height: 56px;
+    text-align: center;
+    font-size: 28px;
+    font-weight: bold;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    outline: none;
+    transition: all 0.3s;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+}
+
+.pin-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.pin-input::-webkit-outer-spin-button,
+.pin-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* ===== 生成PIN码弹窗 ===== */
+.pin-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s;
+}
+
+.pin-modal.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.pin-modal-content {
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    text-align: center;
+    max-width: 320px;
+    width: 90%;
+    transform: scale(0.9);
+    transition: transform 0.3s;
+}
+
+.pin-modal.show .pin-modal-content {
+    transform: scale(1);
+}
+
+.pin-modal-title {
+    font-size: 18px;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.pin-modal-hint {
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 20px;
+}
+
+.pin-code-display {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 15px;
+}
+
+.pin-digit {
+    width: 48px;
+    height: 56px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-size: 32px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+}
+
+.pin-timer {
+    font-size: 14px;
+    color: #999;
+    margin-bottom: 15px;
+}
+
+.pin-timer.warning {
+    color: #e74c3c;
+}
+
+.pin-modal-close {
+    padding: 10px 30px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.pin-modal-close:hover {
+    background: #5a6268;
 }

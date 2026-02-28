@@ -80,6 +80,7 @@
         <div class="header-info">
             <span class="user-badge" id="userBadge">👤 加载中...</span>
             <button id="refreshBtn" class="refresh-btn">刷新扫描</button>
+            <button id="generatePinBtn" class="pin-btn">🔑 PIN码</button>
             <a href="/api/logout" class="logout-btn">退出登录</a>
         </div>
     </header>
@@ -129,6 +130,22 @@
         </div>
         <div class="quick-nav-tooltip" id="quickNavTooltip"></div>
     </main>
+
+    <!-- PIN码弹窗 -->
+    <div class="pin-modal" id="pinModal">
+        <div class="pin-modal-content">
+            <h3 class="pin-modal-title">PIN码登录</h3>
+            <p class="pin-modal-hint">请在其他设备上输入此PIN码登录</p>
+            <div class="pin-code-display" id="pinCodeDisplay">
+                <div class="pin-digit">-</div>
+                <div class="pin-digit">-</div>
+                <div class="pin-digit">-</div>
+                <div class="pin-digit">-</div>
+            </div>
+            <p class="pin-timer" id="pinTimer">有效期: 5:00</p>
+            <button class="pin-modal-close" id="pinModalClose">关闭</button>
+        </div>
+    </div>
 
     <script src="/js/app.js"></script>
     <script>
@@ -523,6 +540,85 @@
             const content = header.nextElementSibling;
             content.style.display = content.style.display === 'none' ? 'block' : 'none';
         }
+
+        // ==================== PIN码生成 ====================
+        let pinTimerInterval = null;
+        let pinExpiresAt = null;
+
+        // 生成PIN码按钮点击
+        document.getElementById('generatePinBtn').addEventListener('click', async () => {
+            try {
+                const response = await api('/api/pin/generate', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success) {
+                    showPinModal(result.pin, result.expiresAt);
+                } else {
+                    alert('生成PIN码失败: ' + result.error);
+                }
+            } catch (err) {
+                if (err.message !== '未登录') {
+                    alert('请求失败: ' + err.message);
+                }
+            }
+        });
+
+        // 显示PIN码弹窗
+        function showPinModal(pin, expiresAt) {
+            const modal = document.getElementById('pinModal');
+            const display = document.getElementById('pinCodeDisplay');
+            const timer = document.getElementById('pinTimer');
+
+            // 显示PIN码
+            display.innerHTML = pin.split('').map(d => `<div class="pin-digit">${d}</div>`).join('');
+
+            // 设置过期时间
+            pinExpiresAt = expiresAt;
+
+            // 清除旧的定时器
+            if (pinTimerInterval) {
+                clearInterval(pinTimerInterval);
+            }
+
+            // 更新倒计时
+            function updateTimer() {
+                const remaining = Math.max(0, pinExpiresAt - Date.now());
+                const minutes = Math.floor(remaining / 60000);
+                const seconds = Math.floor((remaining % 60000) / 1000);
+
+                timer.textContent = `有效期: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                timer.classList.toggle('warning', remaining < 60000);
+
+                if (remaining <= 0) {
+                    clearInterval(pinTimerInterval);
+                    timer.textContent = 'PIN码已过期';
+                    timer.classList.add('warning');
+                }
+            }
+
+            updateTimer();
+            pinTimerInterval = setInterval(updateTimer, 1000);
+
+            // 显示弹窗
+            modal.classList.add('show');
+        }
+
+        // 关闭PIN码弹窗
+        document.getElementById('pinModalClose').addEventListener('click', () => {
+            const modal = document.getElementById('pinModal');
+            modal.classList.remove('show');
+            if (pinTimerInterval) {
+                clearInterval(pinTimerInterval);
+                pinTimerInterval = null;
+            }
+        });
+
+        // 点击弹窗外部关闭
+        document.getElementById('pinModal').addEventListener('click', (e) => {
+            if (e.target.id === 'pinModal') {
+                document.getElementById('pinModalClose').click();
+            }
+        });
 
         // 全局页面滚动条滑块
         function initPageSlider() {

@@ -6,6 +6,7 @@ const router = express.Router();
 const config = require('../config');
 const sessionManager = require('../models/session');
 const qrCodeSession = require('../models/qrCodeSession');
+const pinCodeSession = require('../models/pinCodeSession');
 
 /**
  * 登录页面 (重定向到静态页面)
@@ -178,6 +179,80 @@ router.post('/api/qrcode/cancel', (req, res) => {
 router.get('/qr-confirm/:token', (req, res) => {
   const { token } = req.params;
   res.redirect(`/qr-confirm.html?token=${token}`);
+});
+
+// ==================== PIN码登录 API ====================
+
+/**
+ * 生成PIN码 (A设备，已登录用户)
+ */
+router.post('/api/pin/generate', (req, res) => {
+  const sessionId = req.cookies.sessionId;
+  const session = sessionManager.getSession(sessionId);
+  
+  if (!session) {
+    return res.status(401).json({ success: false, error: '未登录' });
+  }
+  
+  const result = pinCodeSession.createPinSession(session.username);
+  res.json({
+    success: true,
+    pin: result.pin,
+    expiresAt: result.expiresAt
+  });
+});
+
+/**
+ * PIN码登录 (B设备)
+ */
+router.post('/api/pin/login', (req, res) => {
+  const { pin } = req.body;
+  const cfg = config.getConfig();
+  
+  if (!pin || !/^\d{4}$/.test(pin)) {
+    return res.status(400).json({ success: false, error: '请输入4位数字PIN码' });
+  }
+  
+  // 使用PIN码
+  const result = pinCodeSession.usePinCode(pin);
+  
+  if (!result) {
+    return res.status(401).json({ success: false, error: 'PIN码无效或已过期' });
+  }
+  
+  // 创建会话
+  const newSessionId = sessionManager.createSession(result.username);
+  
+  // 删除已使用的PIN码会话
+  pinCodeSession.deletePinSession(pin);
+  
+  // 设置Cookie (7天有效期)
+  res.cookie('sessionId', newSessionId, {
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7天
+    secure: cfg.https?.enabled || false,
+    sameSite: 'strict'
+  });
+  
+  res.json({ success: true, username: result.username });
+});
+
+/**
+ * 查询PIN码状态 (A设备轮询)
+ */
+router.get('/api/pin/status/:pin', (req, res) => {
+  const { pin } = req.params;
+  const pinSession = pinCodeSession.getPinSession(pin);
+  
+  if (!pinSession) {
+    return res.json({ success: false, status: 'invalid' });
+  }
+  
+  res.json({
+    success: true,
+    status: pinSession.status,
+    username: pinSession.username
+  });
 });
 
 module.exports = router;
