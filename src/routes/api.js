@@ -147,4 +147,53 @@ router.get('/favorite/check/:videoId', requireAuth, (req, res) => {
   res.json({ isFavorite: isFav });
 });
 
+/**
+ * 获取同目录下的其他视频
+ */
+router.get('/sibling-videos', requireAuth, (req, res) => {
+  const { id } = req.query;
+  const username = req.session.username;
+  
+  if (!id) {
+    return res.status(400).json({ error: '缺少 id 参数' });
+  }
+  
+  const currentVideoInfo = videoIdManager.getVideoById(id);
+  if (!currentVideoInfo) {
+    return res.status(404).json({ error: '视频不存在' });
+  }
+  
+  // 权限验证
+  if (!dirPermission.hasAccess(username, currentVideoInfo.dirName)) {
+    return res.status(403).json({ error: '无权访问' });
+  }
+  
+  const { dirName, relativePath } = currentVideoInfo;
+  const path = require('path');
+  
+  // 获取当前视频所在目录（relativePath 去掉文件名）
+  const currentDir = path.dirname(relativePath);
+  const currentFilename = path.basename(relativePath);
+  
+  // 从缓存中获取同目录下的其他视频
+  const allVideos = videoCache.getVideos();
+  const siblingVideos = allVideos
+    .filter(video => {
+      // 同一目录且不是当前视频
+      const videoDir = path.dirname(video.relativePath);
+      return video.dirName === dirName && 
+             videoDir === currentDir && 
+             path.basename(video.relativePath) !== currentFilename;
+    })
+    .map(video => ({
+      id: videoIdManager.getVideoId(video.dirName, video.relativePath),
+      filename: path.basename(video.relativePath),
+      relativePath: video.relativePath
+    }))
+    // 按文件名排序
+    .sort((a, b) => a.filename.localeCompare(b.filename, 'zh-CN', { numeric: true }));
+  
+  res.json({ videos: siblingVideos, currentDir });
+});
+
 module.exports = router;

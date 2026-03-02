@@ -76,6 +76,76 @@
             display: none;
             margin-bottom: 10px;
         }
+        .sibling-videos {
+            margin-top: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .sibling-videos h3 {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .sibling-videos h3::before {
+            content: '📁';
+        }
+        .sibling-list {
+            display: grid;
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .sibling-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: white;
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+            transition: all 0.2s;
+        }
+        .sibling-item:hover {
+            border-color: #4CAF50;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .sibling-item .filename {
+            flex: 1;
+            font-size: 13px;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-right: 10px;
+        }
+        .sibling-item .play-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 12px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: none;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        .sibling-item .play-btn:hover {
+            background: #45a049;
+        }
+        .sibling-empty {
+            color: #999;
+            font-size: 13px;
+            text-align: center;
+            padding: 20px;
+        }
     </style>
 </head>
 <body>
@@ -105,6 +175,11 @@
                     <span>⬇</span> 下载视频
                 </button>
                 <span id="downloadProgress" class="download-progress"></span>
+            </div>
+
+            <div class="sibling-videos" id="siblingSection" style="display: none;">
+                <h3 id="siblingTitle">同目录视频</h3>
+                <div class="sibling-list" id="siblingList"></div>
             </div>
         </div>
     </div>
@@ -238,6 +313,43 @@
             }
         }
 
+        // 加载同目录下的其他视频
+        async function loadSiblingVideos() {
+            if (!currentVideoId) return;
+
+            try {
+                const response = await api(`/api/sibling-videos?id=${currentVideoId}`);
+                if (!response.ok) return;
+
+                const data = await response.json();
+                const { videos, currentDir } = data;
+
+                const section = document.getElementById('siblingSection');
+                const list = document.getElementById('siblingList');
+                const title = document.getElementById('siblingTitle');
+
+                if (videos.length === 0) {
+                    section.style.display = 'none';
+                    return;
+                }
+
+                // 更新标题显示目录路径
+                title.textContent = `同目录视频 (${currentDir})`;
+
+                // 渲染视频列表
+                list.innerHTML = videos.map(video => `
+                    <div class="sibling-item">
+                        <span class="filename" title="${video.filename}">${video.filename}</span>
+                        <a href="player.html?id=${video.id}" class="play-btn">▶ 播放</a>
+                    </div>
+                `).join('');
+
+                section.style.display = 'block';
+            } catch (err) {
+                console.error('加载同目录视频失败:', err);
+            }
+        }
+
         // 初始化播放器
         function initPlayer(url) {
             const video = document.getElementById('videoPlayer');
@@ -290,6 +402,9 @@
 
                 // 检查收藏状态
                 await checkFavorite();
+
+                // 加载同目录下的其他视频
+                await loadSiblingVideos();
 
             } catch (err) {
                 console.error('加载视频信息失败:', err);
