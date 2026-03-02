@@ -228,6 +228,9 @@
                 const data = await response.json();
                 favorites = data.favorites || [];
                 
+                // 按收藏时间降序排列（最近收藏的在前）
+                favorites.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+                
                 // 更新统计
                 document.getElementById('videoCount').textContent = favorites.length;
                 const dirs = [...new Set(favorites.map(f => f.dirName))];
