@@ -102,7 +102,6 @@
         .sibling-item {
             display: flex;
             align-items: center;
-            justify-content: space-between;
             background: white;
             padding: 10px 12px;
             border-radius: 6px;
@@ -120,19 +119,20 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            margin-right: 10px;
+            margin-left: 10px;
         }
         .sibling-item .play-btn {
             display: inline-flex;
             align-items: center;
-            gap: 4px;
-            padding: 6px 12px;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
             background: #4CAF50;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 50%;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 14px;
             text-decoration: none;
             transition: background 0.2s;
             flex-shrink: 0;
@@ -339,8 +339,8 @@
                 // 渲染视频列表
                 list.innerHTML = videos.map(video => `
                     <div class="sibling-item">
+                        <a href="player.html?id=${video.id}" class="play-btn">▶</a>
                         <span class="filename" title="${video.filename}">${video.filename}</span>
-                        <a href="player.html?id=${video.id}" class="play-btn">▶ 播放</a>
                     </div>
                 `).join('');
 
