@@ -8,13 +8,18 @@ const videoCache = require('../models/videoCache');
 const videoStream = require('../services/videoStream');
 const videoIdManager = require('../utils/videoId');
 const favoriteManager = require('../models/favorite');
+const dirPermission = require('../utils/dirPermission');
 const { requireAuth } = require('../middleware/auth');
 
 /**
  * 获取视频列表
  */
 router.get('/videos', requireAuth, (req, res) => {
-  const videos = videoCache.getVideos();
+  const username = req.session.username;
+  const allVideos = videoCache.getVideos();
+  
+  // 根据用户权限过滤视频
+  const videos = dirPermission.filterVideosByPermission(allVideos, username);
   const dirGroups = [...new Set(videos.map(v => v.dirName))];
   
   // 为每个视频添加 ID
@@ -54,6 +59,7 @@ router.get('/scan-status', requireAuth, (req, res) => {
  */
 router.get('/video-info', requireAuth, (req, res) => {
   const { id } = req.query;
+  const username = req.session.username;
   
   if (!id) {
     return res.status(400).json({ error: '缺少 id 参数' });
@@ -64,6 +70,11 @@ router.get('/video-info', requireAuth, (req, res) => {
     return res.status(404).json({ error: '视频不存在或已过期' });
   }
   
+  // 权限验证
+  if (!dirPermission.hasAccess(username, info.dirName)) {
+    return res.status(403).json({ error: '无权访问该视频' });
+  }
+  
   res.json(info);
 });
 
@@ -72,7 +83,8 @@ router.get('/video-info', requireAuth, (req, res) => {
  */
 router.get('/stream/:videoId', requireAuth, (req, res) => {
   const { videoId } = req.params;
-  videoStream.streamVideo(req, res, videoId);
+  const username = req.session.username;
+  videoStream.streamVideo(req, res, videoId, username);
 });
 
 /**
@@ -80,7 +92,8 @@ router.get('/stream/:videoId', requireAuth, (req, res) => {
  */
 router.get('/download/:videoId', requireAuth, (req, res) => {
   const { videoId } = req.params;
-  videoStream.downloadVideo(res, videoId);
+  const username = req.session.username;
+  videoStream.downloadVideo(res, videoId, username);
 });
 
 /**

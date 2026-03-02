@@ -111,6 +111,10 @@ sudo certbot certonly --standalone -d your-domain.com
     {
       "username": "your-username",
       "password": "your-password"
+    },
+    {
+      "username": "guest",
+      "password": "guest-password"
     }
   ],
   "port": 18899,
@@ -129,6 +133,11 @@ sudo certbot certonly --standalone -d your-domain.com
     {
       "name": "电视剧",
       "path": "/path/to/your/tv-shows"
+    },
+    {
+      "name": "私密视频",
+      "path": "/path/to/private/videos",
+      "allowedUsers": ["your-username"]
     }
   ]
 }
@@ -145,7 +154,10 @@ sudo certbot certonly --standalone -d your-domain.com
 | `https.enabled` | 是否启用 HTTPS，生产环境强烈建议开启 |
 | `https.key` | SSL 私钥路径 |
 | `https.cert` | SSL 证书路径 |
-| `videoDirs` | 视频目录配置，`name` 为显示名称，`path` 为绝对路径 |
+| `videoDirs` | 视频目录配置 |
+| `videoDirs[].name` | 目录显示名称 |
+| `videoDirs[].path` | 目录绝对路径 |
+| `videoDirs[].allowedUsers` | 可选，指定可访问该目录的用户列表。不配置则对所有用户开放 |
 
 ### 4. 启动服务
 

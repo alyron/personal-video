@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const videoIdManager = require('../utils/videoId');
+const dirPermission = require('../utils/dirPermission');
 
 // 内容类型映射
 const CONTENT_TYPE_MAP = {
@@ -88,8 +89,19 @@ function getVideoInfo(videoId) {
  * @param {object} req Express请求对象
  * @param {object} res Express响应对象
  * @param {string} videoId 视频ID
+ * @param {string} username 用户名（用于权限验证）
  */
-function streamVideo(req, res, videoId) {
+function streamVideo(req, res, videoId, username) {
+  const videoInfo = videoIdManager.getVideoById(videoId);
+  if (!videoInfo) {
+    return res.status(404).json({ error: '视频不存在或已过期' });
+  }
+  
+  // 权限验证
+  if (!dirPermission.hasAccess(username, videoInfo.dirName)) {
+    return res.status(403).json({ error: '无权访问该视频' });
+  }
+  
   const pathInfo = getVideoPath(videoId);
   if (!pathInfo) {
     return res.status(404).json({ error: '视频不存在或已过期' });
@@ -162,8 +174,19 @@ function streamVideo(req, res, videoId) {
  * 下载视频
  * @param {object} res Express响应对象
  * @param {string} videoId 视频ID
+ * @param {string} username 用户名（用于权限验证）
  */
-function downloadVideo(res, videoId) {
+function downloadVideo(res, videoId, username) {
+  const videoInfo = videoIdManager.getVideoById(videoId);
+  if (!videoInfo) {
+    return res.status(404).json({ error: '视频不存在或已过期' });
+  }
+  
+  // 权限验证
+  if (!dirPermission.hasAccess(username, videoInfo.dirName)) {
+    return res.status(403).json({ error: '无权访问该视频' });
+  }
+  
   const pathInfo = getVideoPath(videoId);
   if (!pathInfo) {
     return res.status(404).json({ error: '视频不存在或已过期' });
