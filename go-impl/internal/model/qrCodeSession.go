@@ -34,9 +34,9 @@ type QRSession struct {
 // QRCodeManager 二维码会话管理器
 type QRCodeManager struct {
 	filePath string
-	sessions map[string]*QRSession
-	mu       sync.RWMutex
+	sessions sync.Map // token -> *QRSession
 	expiry   time.Duration
+	dirty    chan struct{}
 }
 
 var (
@@ -51,11 +51,12 @@ func GetQRCodeManager() *QRCodeManager {
 		baseDir := filepath.Dir(execPath)
 		qrCodeManager = &QRCodeManager{
 			filePath: filepath.Join(baseDir, "data", "qrSessions.json"),
-			sessions: make(map[string]*QRSession),
 			expiry:   5 * time.Minute,
+			dirty:    make(chan struct{}, 1),
 		}
 		qrCodeManager.load()
 		go qrCodeManager.startCleanup()
+		go qrCodeManager.autoSave()
 	})
 	return qrCodeManager
 }
@@ -65,24 +66,45 @@ func (qm *QRCodeManager) load() {
 	if err != nil {
 		return
 	}
-	json.Unmarshal(data, &qm.sessions)
+	var sessions map[string]*QRSession
+	if json.Unmarshal(data, &sessions) == nil {
+		for token, s := range sessions {
+			qm.sessions.Store(token, s)
+		}
+	}
 }
 
 func (qm *QRCodeManager) save() {
+	sessions := make(map[string]*QRSession)
+	qm.sessions.Range(func(key, value interface{}) bool {
+		sessions[key.(string)] = value.(*QRSession)
+		return true
+	})
+
 	os.MkdirAll(filepath.Dir(qm.filePath), 0755)
-	data, _ := json.MarshalIndent(qm.sessions, "", "  ")
+	data, _ := json.MarshalIndent(sessions, "", "  ")
 	os.WriteFile(qm.filePath, data, 0644)
+}
+
+func (qm *QRCodeManager) autoSave() {
+	for range qm.dirty {
+		qm.save()
+	}
+}
+
+func (qm *QRCodeManager) markDirty() {
+	select {
+	case qm.dirty <- struct{}{}:
+	default:
+	}
 }
 
 // CreateQRSession 创建二维码会话
 func (qm *QRCodeManager) CreateQRSession() (string, int64) {
-	qm.mu.Lock()
-	defer qm.mu.Unlock()
-	
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
 	token := hex.EncodeToString(bytes)
-	
+
 	now := time.Now()
 	session := &QRSession{
 		Token:     token,
@@ -90,82 +112,82 @@ func (qm *QRCodeManager) CreateQRSession() (string, int64) {
 		CreatedAt: now.UnixMilli(),
 		ExpiresAt: now.Add(qm.expiry).UnixMilli(),
 	}
-	
-	qm.sessions[token] = session
-	qm.save()
-	
+
+	qm.sessions.Store(token, session)
+	qm.markDirty()
+
 	return token, session.ExpiresAt
 }
 
 // GetQRSession 获取二维码会话
 func (qm *QRCodeManager) GetQRSession(token string) *QRSession {
-	qm.mu.RLock()
-	defer qm.mu.RUnlock()
-	
-	session, ok := qm.sessions[token]
+	value, ok := qm.sessions.Load(token)
 	if !ok {
 		return nil
 	}
-	
-	// 检查过期
+
+	session := value.(*QRSession)
 	if time.Now().UnixMilli() > session.ExpiresAt {
 		session.Status = QRStatusExpired
 	}
-	
+
 	return session
 }
 
 // MarkScanned 标记为已扫描
 func (qm *QRCodeManager) MarkScanned(token string) bool {
-	qm.mu.Lock()
-	defer qm.mu.Unlock()
-	
-	session, ok := qm.sessions[token]
-	if !ok || session.Status != QRStatusPending {
+	value, ok := qm.sessions.Load(token)
+	if !ok {
 		return false
 	}
-	
+
+	session := value.(*QRSession)
+	if session.Status != QRStatusPending {
+		return false
+	}
+
 	session.Status = QRStatusScanned
-	qm.save()
+	qm.markDirty()
 	return true
 }
 
 // ConfirmLogin 确认登录
 func (qm *QRCodeManager) ConfirmLogin(token, sessionID, username string) bool {
-	qm.mu.Lock()
-	defer qm.mu.Unlock()
-	
-	session, ok := qm.sessions[token]
-	if !ok || session.Status != QRStatusScanned {
+	value, ok := qm.sessions.Load(token)
+	if !ok {
 		return false
 	}
-	
+
+	session := value.(*QRSession)
+	if session.Status != QRStatusScanned {
+		return false
+	}
+
 	session.Status = QRStatusConfirmed
 	session.SessionID = sessionID
 	session.Username = username
-	qm.save()
+	qm.markDirty()
 	return true
 }
 
 // CancelLogin 取消登录
 func (qm *QRCodeManager) CancelLogin(token string) {
-	qm.mu.Lock()
-	defer qm.mu.Unlock()
-	
-	session, ok := qm.sessions[token]
-	if ok && session.Status == QRStatusScanned {
+	value, ok := qm.sessions.Load(token)
+	if !ok {
+		return
+	}
+
+	session := value.(*QRSession)
+	if session.Status == QRStatusScanned {
 		session.Status = QRStatusCancelled
-		qm.save()
+		qm.markDirty()
 	}
 }
 
 // DeleteQRSession 删除二维码会话
 func (qm *QRCodeManager) DeleteQRSession(token string) {
-	qm.mu.Lock()
-	defer qm.mu.Unlock()
-	
-	delete(qm.sessions, token)
-	qm.save()
+	qm.sessions.Delete(token)
+	qm.markDirty()
 }
 
 func (qm *QRCodeManager) startCleanup() {
@@ -176,14 +198,13 @@ func (qm *QRCodeManager) startCleanup() {
 }
 
 func (qm *QRCodeManager) cleanup() {
-	qm.mu.Lock()
-	defer qm.mu.Unlock()
-	
 	now := time.Now().UnixMilli()
-	for token, session := range qm.sessions {
+	qm.sessions.Range(func(key, value interface{}) bool {
+		session := value.(*QRSession)
 		if now > session.ExpiresAt {
-			delete(qm.sessions, token)
+			qm.sessions.Delete(key)
 		}
-	}
-	qm.save()
+		return true
+	})
+	qm.markDirty()
 }

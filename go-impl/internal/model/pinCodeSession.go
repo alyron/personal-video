@@ -31,9 +31,9 @@ type PINSession struct {
 // PINCodeManager PIN码管理器
 type PINCodeManager struct {
 	filePath string
-	sessions map[string]*PINSession
-	mu       sync.RWMutex
+	sessions sync.Map // pin -> *PINSession
 	expiry   time.Duration
+	dirty    chan struct{}
 }
 
 var (
@@ -48,11 +48,12 @@ func GetPINCodeManager() *PINCodeManager {
 		baseDir := filepath.Dir(execPath)
 		pinCodeManager = &PINCodeManager{
 			filePath: filepath.Join(baseDir, "data", "pinSessions.json"),
-			sessions: make(map[string]*PINSession),
 			expiry:   5 * time.Minute,
+			dirty:    make(chan struct{}, 1),
 		}
 		pinCodeManager.load()
 		go pinCodeManager.startCleanup()
+		go pinCodeManager.autoSave()
 	})
 	return pinCodeManager
 }
@@ -62,13 +63,37 @@ func (pm *PINCodeManager) load() {
 	if err != nil {
 		return
 	}
-	json.Unmarshal(data, &pm.sessions)
+	var sessions map[string]*PINSession
+	if json.Unmarshal(data, &sessions) == nil {
+		for pin, s := range sessions {
+			pm.sessions.Store(pin, s)
+		}
+	}
 }
 
 func (pm *PINCodeManager) save() {
+	sessions := make(map[string]*PINSession)
+	pm.sessions.Range(func(key, value interface{}) bool {
+		sessions[key.(string)] = value.(*PINSession)
+		return true
+	})
+
 	os.MkdirAll(filepath.Dir(pm.filePath), 0755)
-	data, _ := json.MarshalIndent(pm.sessions, "", "  ")
+	data, _ := json.MarshalIndent(sessions, "", "  ")
 	os.WriteFile(pm.filePath, data, 0644)
+}
+
+func (pm *PINCodeManager) autoSave() {
+	for range pm.dirty {
+		pm.save()
+	}
+}
+
+func (pm *PINCodeManager) markDirty() {
+	select {
+	case pm.dirty <- struct{}{}:
+	default:
+	}
 }
 
 // generatePIN 生成4位数字PIN码
@@ -78,23 +103,24 @@ func generatePIN() string {
 
 // CreatePINSession 创建PIN码会话
 func (pm *PINCodeManager) CreatePINSession(username string) (string, int64) {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	
 	// 删除该用户之前未使用的PIN码
-	for pin, session := range pm.sessions {
+	pm.sessions.Range(func(key, value interface{}) bool {
+		session := value.(*PINSession)
 		if session.Username == username && session.Status == PINStatusPending {
-			delete(pm.sessions, pin)
+			pm.sessions.Delete(key)
 		}
-	}
-	
+		return true
+	})
+
 	// 生成唯一PIN码
 	pin := generatePIN()
-	for _, exists := pm.sessions[pin]; exists; {
+	for {
+		if _, ok := pm.sessions.Load(pin); !ok {
+			break
+		}
 		pin = generatePIN()
-		_, exists = pm.sessions[pin]
 	}
-	
+
 	now := time.Now()
 	session := &PINSession{
 		PIN:       pin,
@@ -103,61 +129,56 @@ func (pm *PINCodeManager) CreatePINSession(username string) (string, int64) {
 		CreatedAt: now.UnixMilli(),
 		ExpiresAt: now.Add(pm.expiry).UnixMilli(),
 	}
-	
-	pm.sessions[pin] = session
-	pm.save()
-	
+
+	pm.sessions.Store(pin, session)
+	pm.markDirty()
+
 	return pin, session.ExpiresAt
 }
 
 // GetPINSession 获取PIN码会话
 func (pm *PINCodeManager) GetPINSession(pin string) *PINSession {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	
-	session, ok := pm.sessions[pin]
+	value, ok := pm.sessions.Load(pin)
 	if !ok {
 		return nil
 	}
-	
-	// 检查过期
+
+	session := value.(*PINSession)
 	if time.Now().UnixMilli() > session.ExpiresAt {
 		session.Status = PINStatusExpired
 	}
-	
+
 	return session
 }
 
 // UsePINCode 使用PIN码
 func (pm *PINCodeManager) UsePINCode(pin string) *string {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	
-	session, ok := pm.sessions[pin]
-	if !ok || session.Status != PINStatusPending {
+	value, ok := pm.sessions.Load(pin)
+	if !ok {
 		return nil
 	}
-	
-	// 检查过期
+
+	session := value.(*PINSession)
+	if session.Status != PINStatusPending {
+		return nil
+	}
+
 	if time.Now().UnixMilli() > session.ExpiresAt {
 		session.Status = PINStatusExpired
-		pm.save()
+		pm.markDirty()
 		return nil
 	}
-	
+
 	session.Status = PINStatusUsed
-	pm.save()
-	
+	pm.markDirty()
+
 	return &session.Username
 }
 
 // DeletePINSession 删除PIN码会话
 func (pm *PINCodeManager) DeletePINSession(pin string) {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	
-	delete(pm.sessions, pin)
-	pm.save()
+	pm.sessions.Delete(pin)
+	pm.markDirty()
 }
 
 func (pm *PINCodeManager) startCleanup() {
@@ -168,14 +189,13 @@ func (pm *PINCodeManager) startCleanup() {
 }
 
 func (pm *PINCodeManager) cleanup() {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	
 	now := time.Now().UnixMilli()
-	for pin, session := range pm.sessions {
+	pm.sessions.Range(func(key, value interface{}) bool {
+		session := value.(*PINSession)
 		if now > session.ExpiresAt {
-			delete(pm.sessions, pin)
+			pm.sessions.Delete(key)
 		}
-	}
-	pm.save()
+		return true
+	})
+	pm.markDirty()
 }

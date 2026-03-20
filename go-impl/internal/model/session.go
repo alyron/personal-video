@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,12 +22,9 @@ type Session struct {
 // SessionManager 会话管理器
 type SessionManager struct {
 	filePath    string
-	sessions    map[string]*Session
-	cache       map[string]*Session
-	cacheTime   time.Time
-	cacheTTL    time.Duration
+	sessions    sync.Map // sessionID -> *Session
 	sessionExpy time.Duration
-	mu          sync.RWMutex
+	dirty       atomic.Bool
 }
 
 var (
@@ -41,60 +39,57 @@ func GetSessionManager() *SessionManager {
 		baseDir := filepath.Dir(execPath)
 		sessionManager = &SessionManager{
 			filePath:    filepath.Join(baseDir, "data", "sessions.json"),
-			sessions:    make(map[string]*Session),
-			cache:       make(map[string]*Session),
-			cacheTTL:    5 * time.Second,
 			sessionExpy: 7 * 24 * time.Hour,
 		}
 		sessionManager.load()
-		// 启动清理协程
 		go sessionManager.startCleanup()
 	})
 	return sessionManager
 }
 
 func (sm *SessionManager) load() {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	
 	data, err := os.ReadFile(sm.filePath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			sm.sessions = make(map[string]*Session)
-			return
-		}
 		return
 	}
-	
-	json.Unmarshal(data, &sm.sessions)
+
+	var sessions map[string]*Session
+	if json.Unmarshal(data, &sessions) == nil {
+		for id, s := range sessions {
+			sm.sessions.Store(id, s)
+		}
+	}
 }
 
 func (sm *SessionManager) save() {
-	// 确保目录存在
+	sessions := make(map[string]*Session)
+	sm.sessions.Range(func(key, value interface{}) bool {
+		sessions[key.(string)] = value.(*Session)
+		return true
+	})
+
 	os.MkdirAll(filepath.Dir(sm.filePath), 0755)
-	
-	data, _ := json.MarshalIndent(sm.sessions, "", "  ")
+	data, _ := json.MarshalIndent(sessions, "", "  ")
 	os.WriteFile(sm.filePath, data, 0644)
+	sm.dirty.Store(false)
 }
 
 // CreateSession 创建会话
 func (sm *SessionManager) CreateSession(username string) (string, error) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	
-	// 生成随机 session ID
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
 	sessionID := hex.EncodeToString(bytes)
-	
+
 	now := time.Now()
-	sm.sessions[sessionID] = &Session{
+	sm.sessions.Store(sessionID, &Session{
 		Username:  username,
 		CreatedAt: now.UnixMilli(),
 		ExpiresAt: now.Add(sm.sessionExpy).UnixMilli(),
-	}
-	
-	sm.save()
+	})
+
+	sm.dirty.Store(true)
+	go sm.save() // 异步保存
+
 	return sessionID, nil
 }
 
@@ -103,30 +98,25 @@ func (sm *SessionManager) GetSession(sessionID string) *Session {
 	if sessionID == "" {
 		return nil
 	}
-	
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	
-	session, ok := sm.sessions[sessionID]
+
+	value, ok := sm.sessions.Load(sessionID)
 	if !ok {
 		return nil
 	}
-	
-	// 检查过期
+
+	session := value.(*Session)
 	if time.Now().UnixMilli() > session.ExpiresAt {
 		return nil
 	}
-	
+
 	return session
 }
 
 // DeleteSession 删除会话
 func (sm *SessionManager) DeleteSession(sessionID string) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	
-	delete(sm.sessions, sessionID)
-	sm.save()
+	sm.sessions.Delete(sessionID)
+	sm.dirty.Store(true)
+	go sm.save()
 }
 
 func (sm *SessionManager) startCleanup() {
@@ -137,19 +127,18 @@ func (sm *SessionManager) startCleanup() {
 }
 
 func (sm *SessionManager) cleanup() {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	
 	now := time.Now().UnixMilli()
 	changed := false
-	
-	for id, session := range sm.sessions {
+
+	sm.sessions.Range(func(key, value interface{}) bool {
+		session := value.(*Session)
 		if now > session.ExpiresAt {
-			delete(sm.sessions, id)
+			sm.sessions.Delete(key)
 			changed = true
 		}
-	}
-	
+		return true
+	})
+
 	if changed {
 		sm.save()
 	}

@@ -19,10 +19,8 @@ type Favorite struct {
 // FavoriteManager 收藏管理器
 type FavoriteManager struct {
 	filePath string
-	data     map[string][]Favorite
-	cacheTTL time.Duration
-	cacheMu  sync.RWMutex
-	mu       sync.RWMutex
+	data     sync.Map // username -> []Favorite
+	dirty    chan struct{}
 }
 
 var (
@@ -37,10 +35,10 @@ func GetFavoriteManager() *FavoriteManager {
 		baseDir := filepath.Dir(execPath)
 		favoriteManager = &FavoriteManager{
 			filePath: filepath.Join(baseDir, "data", "favorites.json"),
-			data:     make(map[string][]Favorite),
-			cacheTTL: 5 * time.Minute,
+			dirty:    make(chan struct{}, 1),
 		}
 		favoriteManager.load()
+		go favoriteManager.autoSave()
 	})
 	return favoriteManager
 }
@@ -48,65 +46,84 @@ func GetFavoriteManager() *FavoriteManager {
 func (fm *FavoriteManager) load() {
 	data, err := os.ReadFile(fm.filePath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			fm.data = make(map[string][]Favorite)
-			return
-		}
 		return
 	}
-	json.Unmarshal(data, &fm.data)
+
+	var favs map[string][]Favorite
+	if json.Unmarshal(data, &favs) == nil {
+		for user, f := range favs {
+			fm.data.Store(user, f)
+		}
+	}
 }
 
 func (fm *FavoriteManager) save() {
+	favs := make(map[string][]Favorite)
+	fm.data.Range(func(key, value interface{}) bool {
+		favs[key.(string)] = value.([]Favorite)
+		return true
+	})
+
 	os.MkdirAll(filepath.Dir(fm.filePath), 0755)
-	data, _ := json.MarshalIndent(fm.data, "", "  ")
+	data, _ := json.MarshalIndent(favs, "", "  ")
 	os.WriteFile(fm.filePath, data, 0644)
+}
+
+func (fm *FavoriteManager) autoSave() {
+	for range fm.dirty {
+		fm.save()
+	}
+}
+
+func (fm *FavoriteManager) markDirty() {
+	select {
+	case fm.dirty <- struct{}{}:
+	default:
+	}
 }
 
 // GetFavorites 获取用户收藏列表
 func (fm *FavoriteManager) GetFavorites(username string) []Favorite {
-	fm.mu.RLock()
-	defer fm.mu.RUnlock()
-	
-	return fm.data[username]
+	value, ok := fm.data.Load(username)
+	if !ok {
+		return nil
+	}
+	return value.([]Favorite)
 }
 
 // AddFavorite 添加收藏
 func (fm *FavoriteManager) AddFavorite(username string, fav Favorite) bool {
-	fm.mu.Lock()
-	defer fm.mu.Unlock()
-	
-	if fm.data[username] == nil {
-		fm.data[username] = []Favorite{}
-	}
-	
+	value, _ := fm.data.LoadOrStore(username, []Favorite{})
+	favorites := value.([]Favorite)
+
 	// 检查是否已收藏
-	for _, f := range fm.data[username] {
+	for _, f := range favorites {
 		if f.VideoID == fav.VideoID {
 			return false
 		}
 	}
-	
+
 	fav.AddedAt = time.Now().UnixMilli()
-	fm.data[username] = append(fm.data[username], fav)
-	fm.save()
+	fm.data.Store(username, append(favorites, fav))
+	fm.markDirty()
 	return true
 }
 
 // RemoveFavorite 移除收藏
 func (fm *FavoriteManager) RemoveFavorite(username, videoID string) bool {
-	fm.mu.Lock()
-	defer fm.mu.Unlock()
-	
-	favorites := fm.data[username]
-	if favorites == nil {
+	value, ok := fm.data.Load(username)
+	if !ok {
 		return false
 	}
-	
+
+	favorites := value.([]Favorite)
 	for i, f := range favorites {
 		if f.VideoID == videoID {
-			fm.data[username] = append(favorites[:i], favorites[i+1:]...)
-			fm.save()
+			newFavs := make([]Favorite, 0, len(favorites)-1)
+			newFavs = append(newFavs, favorites[:i]...)
+			newFavs = append(newFavs, favorites[i+1:]...)
+			fm.data.Store(username, newFavs)
+			fm.markDirty()
 			return true
 		}
 	}
@@ -115,14 +132,12 @@ func (fm *FavoriteManager) RemoveFavorite(username, videoID string) bool {
 
 // IsFavorite 检查是否已收藏
 func (fm *FavoriteManager) IsFavorite(username, videoID string) bool {
-	fm.mu.RLock()
-	defer fm.mu.RUnlock()
-	
-	favorites := fm.data[username]
-	if favorites == nil {
+	value, ok := fm.data.Load(username)
+	if !ok {
 		return false
 	}
-	
+
+	favorites := value.([]Favorite)
 	for _, f := range favorites {
 		if f.VideoID == videoID {
 			return true
