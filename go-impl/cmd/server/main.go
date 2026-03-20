@@ -45,7 +45,16 @@ func main() {
 	h.SetupRoutes(r)
 
 	// 创建服务器
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	var addr string
+	if cfg.Host == "::" {
+		// IPv6 所有接口
+		addr = fmt.Sprintf("[%s]:%d", cfg.Host, cfg.Port)
+	} else if cfg.Host == "" || cfg.Host == "0.0.0.0" {
+		// 所有接口
+		addr = fmt.Sprintf(":%d", cfg.Port)
+	} else {
+		addr = fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	}
 	
 	var server *http.Server
 	protocol := "http"
