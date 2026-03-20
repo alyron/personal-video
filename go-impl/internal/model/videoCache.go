@@ -101,11 +101,15 @@ func (vc *VideoCache) GetVideos() []Video {
 // SetVideos 设置视频列表
 func (vc *VideoCache) SetVideos(videos []Video) {
 	vc.mu.Lock()
-	defer vc.mu.Unlock()
-	
 	vc.data.Videos = videos
 	vc.data.LastScanTime = time.Now().UnixMilli()
-	vc.SaveCache()
+	data := vc.data // 复制引用
+	vc.mu.Unlock()
+
+	// 保存到文件（不持有锁）
+	os.MkdirAll(filepath.Dir(vc.filePath), 0755)
+	jsonData, _ := json.MarshalIndent(data, "", "  ")
+	os.WriteFile(vc.filePath, jsonData, 0644)
 }
 
 // IsScanning 是否正在扫描
@@ -161,11 +165,17 @@ func (vc *VideoCache) SetScanning(scanning bool) {
 // GetStatus 获取状态
 func (vc *VideoCache) GetStatus() map[string]interface{} {
 	vc.mu.RLock()
-	defer vc.mu.RUnlock()
-	
+	videoCount := len(vc.data.Videos)
+	lastScanTime := vc.data.LastScanTime
+	vc.mu.RUnlock()
+
+	vc.scanLockMu.Lock()
+	scanning := vc.isScanning
+	vc.scanLockMu.Unlock()
+
 	return map[string]interface{}{
-		"isScanning":   vc.isScanning,
-		"videoCount":   len(vc.data.Videos),
-		"lastScanTime": vc.data.LastScanTime,
+		"isScanning":   scanning,
+		"videoCount":   videoCount,
+		"lastScanTime": lastScanTime,
 	}
 }

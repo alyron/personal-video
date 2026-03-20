@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -56,6 +58,9 @@ func main() {
 		addr = fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	}
 	
+	// 创建静默的错误日志器，过滤 TLS handshake 错误
+	quietLogger := log.New(io.Discard, "", 0)
+
 	var server *http.Server
 	protocol := "http"
 
@@ -70,6 +75,7 @@ func main() {
 				Handler:      r,
 				WriteTimeout: 30 * time.Minute,
 				ReadTimeout:  30 * time.Minute,
+				ErrorLog:     quietLogger,
 			}
 		} else {
 			server = &http.Server{
@@ -78,6 +84,7 @@ func main() {
 				TLSConfig:    &tls.Config{Certificates: []tls.Certificate{cert}},
 				WriteTimeout: 30 * time.Minute,
 				ReadTimeout:  30 * time.Minute,
+				ErrorLog:     quietLogger,
 			}
 			protocol = "https"
 			fmt.Println("HTTPS 模式已启用")
@@ -89,6 +96,7 @@ func main() {
 			Handler:      r,
 			WriteTimeout: 30 * time.Minute,
 			ReadTimeout:  30 * time.Minute,
+			ErrorLog:     quietLogger,
 		}
 	}
 

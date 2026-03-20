@@ -529,21 +529,23 @@ func (h *Handler) getVideos(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) scanVideos(w http.ResponseWriter, r *http.Request) {
-	videos, err := h.videoScanner.ScanAllDirectories()
-	if err != nil {
+	// 检查是否已在扫描
+	if h.videoCache.IsScanning() {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"error":   "扫描失败",
+			"success": true,
+			"message": "扫描已在进行中",
 		})
 		return
 	}
-	
+
+	// 异步启动扫描
+	go h.videoScanner.ScanAllDirectories()
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"count":   len(videos),
+		"message": "扫描已启动",
 	})
 }
 
