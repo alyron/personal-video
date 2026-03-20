@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频列表 - 视频服务器</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            border: none;
+            background: #f5f5f5;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .tab-btn:hover {
+            background: #e0e0e0;
+        }
+        .tab-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        .video-item .favorite-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #ff6b6b;
+            font-size: 18px;
+        }
+        .video-item {
+            position: relative;
+        }
+        /* 排序按钮 */
+        .sort-btn {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .sort-btn:hover {
+            background: #f5f5f5;
+        }
+        .sort-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .toolbar-left {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1 class="header-title">📹 视频服务器</h1>
+        <div class="header-info">
+            <span class="user-badge" id="userBadge">👤 加载中...</span>
+            <button id="refreshBtn" class="refresh-btn">刷新扫描</button>
+            <button id="generatePinBtn" class="pin-btn">🔑 PIN码</button>
+            <a href="/api/logout" class="logout-btn">退出登录</a>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="all" onclick="switchTab('all')">全部视频</button>
+            <button class="tab-btn" data-tab="favorites" onclick="switchTab('favorites')">❤ 我的收藏</button>
+        </div>
+
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <button class="sort-btn" id="sortBySizeBtn" onclick="toggleSortBySize()">
+                    <span>📊</span> 按容量排序
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-number" id="videoCount">0</div>
+                <div class="stat-label" id="videoLabel">视频总数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="dirCount">0</div>
+                <div class="stat-label" id="dirLabel">目录数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label" id="scanStatus">检查状态中...</div>
+            </div>
+        </div>
+
+        <div class="video-list-wrapper">
+            <div class="video-list" id="videoList">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>加载中...</p>
+                </div>
+            </div>
+            <div class="quick-nav" id="quickNav" style="display: none;"></div>
+        </div>
+        <!-- 全局页面滚动条滑块 -->
+        <div class="page-slider" id="pageSlider">
+            <div class="page-slider-track">
+                <div class="page-slider-thumb" id="pageSliderThumb"></div>
+            </div>
+        </div>
+        <div class="quick-nav-tooltip" id="quickNavTooltip"></div>
+    </main>
+
+    <!-- PIN码弹窗 -->
+    <div class="pin-modal" id="pinModal">
+        <div class="pin-modal-content">
+            <h3 class="pin-modal-title">PIN码登录</h3>
+            <p class="pin-modal-hint">请在其他设备上输入此PIN码登录</p>
+            <div class="pin-code-display" id="pinCodeDisplay">
+                <div class="pin-digit">-</div>
+                <div class="pin-digit">-</div>
+                <div class="pin-digit">-</div>
+                <div class="pin-digit">-</div>
+            </div>
+            <p class="pin-timer" id="pinTimer">有效期: 5:00</p>
+            <button class="pin-modal-close" id="pinModalClose">关闭</button>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        let currentTab = 'all';
+        let allVideos = [];
+        let favorites = [];
+        let sortBySize = false; // 是否按容量排序
+
+        // 解析文件大小字符串为字节数
+        function parseSizeToBytes(sizeStr) {
+            if (!sizeStr) return 0;
+            const match = sizeStr.match(/([\d.]+)\s*(GB|MB|KB|TB|B)/i);
+            if (!match) return 0;
+
+            const value = parseFloat(match[1]);
+            const unit = match[2].toUpperCase();
+
+            const units = { 'B': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4 };
+            return value * (units[unit] || 1);
+        }
+
+        // 切换按容量排序
+        function toggleSortBySize() {
+            sortBySize = !sortBySize;
+            const btn = document.getElementById('sortBySizeBtn');
+            btn.classList.toggle('active', sortBySize);
+
+            if (currentTab === 'all') {
+                renderVideoList(allVideos);
+            }
+        }
+
+        // 统一 API 请求处理
+        async function api(url, options = {}) {
+            const response = await fetch(url, { 
+                ...options,
+                credentials: 'same-origin'
+            });
+            
+            if (response.status === 401) {
+                window.location.href = '/login.html';
+                throw new Error('未登录');
+            }
+            
+            return response;
+        }
+
+        // 切换标签
+        async function switchTab(tab) {
+            currentTab = tab;
+            
+            // 更新按钮状态
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+            
+            // 更新统计标签
+            document.getElementById('videoLabel').textContent = tab === 'all' ? '视频总数' : '收藏数量';
+            document.getElementById('dirLabel').textContent = tab === 'all' ? '目录数' : '来源目录';
+            
+            // 渲染对应列表
+            if (tab === 'all') {
+                renderVideoList(allVideos);
+            } else {
+                // 加载收藏
+                await loadFavorites();
+            }
+        }
+
+        // 加载收藏列表
+        async function loadFavorites() {
+            const videoList = document.getElementById('videoList');
+            const quickNav = document.getElementById('quickNav');
+            
+            // 隐藏快速导航
+            quickNav.style.display = 'none';
+            
+            try {
+                const response = await api('/api/favorites');
+                const data = await response.json();
+                favorites = data.favorites || [];
+                
+                // 按收藏时间降序排列（最近收藏的在前）
+                favorites.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+                
+                // 更新统计
+                document.getElementById('videoCount').textContent = favorites.length;
+                const dirs = [...new Set(favorites.map(f => f.dirName))];
+                document.getElementById('dirCount').textContent = dirs.length;
+                
+                if (favorites.length === 0) {
+                    videoList.innerHTML = `
+                        <div class="empty-state">
+                            <h3>暂无收藏</h3>
+                            <p>在视频播放页面点击"收藏"按钮添加收藏</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // 渲染收藏列表
+                let html = '<div class="video-group"><div class="group-content">';
+                
+                favorites.forEach(video => {
+                    html += `
+                        <div class="video-item">
+                            <div class="video-info">
+                                <div class="video-path">📁 ${video.dirName}</div>
+                                <div class="video-name">${video.filename}</div>
+                                <div class="video-meta">收藏于: ${formatTimestamp(video.addedAt)}</div>
+                            </div>
+                            <a href="/player.html?id=${video.videoId}" class="watch-btn" target="_blank">播放</a>
+                        </div>
+                    `;
+                });
+                
+                html += '</div></div>';
+                videoList.innerHTML = html;
+
+            } catch (err) {
+                videoList.innerHTML = `
+                    <div class="empty-state">
+                        <h3>加载失败</h3>
+                        <p>${err.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 渲染视频列表
+        function renderVideoList(videos) {
+            const videoList = document.getElementById('videoList');
+            const quickNav = document.getElementById('quickNav');
+
+            if (videos.length === 0) {
+                videoList.innerHTML = `
+                    <div class="empty-state">
+                        <h3>暂无视频</h3>
+                        <p>点击"刷新扫描"按钮扫描视频目录</p>
+                    </div>
+                `;
+                quickNav.style.display = 'none';
+                return;
+            }
+
+            // 如果按容量排序，先按大小排序（保持目录分组，但组内按大小排序）
+            let videosToRender = [...videos];
+            if (sortBySize) {
+                videosToRender.sort((a, b) => parseSizeToBytes(b.size) - parseSizeToBytes(a.size));
+            }
+
+            // 按目录分组
+            const grouped = {};
+            videosToRender.forEach(video => {
+                if (!grouped[video.dirName]) {
+                    grouped[video.dirName] = [];
+                }
+                grouped[video.dirName].push(video);
+            });
+            
+            // 获取收藏的视频ID列表
+            const favoriteIds = new Set(favorites.map(f => f.videoId));
+            
+            // 目录名称列表（用于快速导航）
+            const dirNames = Object.keys(grouped);
+            
+            let html = '';
+            for (const [dirName, vids] of Object.entries(grouped)) {
+                // 添加 id 以便快速导航定位
+                const dirId = 'dir-' + dirName.replace(/[^a-zA-Z0-9]/g, '_');
+                html += `
+                    <div class="video-group" id="${dirId}">
+                        <div class="group-header" onclick="toggleGroup(this)">
+                            <span class="group-name">📁 ${dirName}</span>
+                            <span class="group-count">${vids.length} 个视频</span>
+                        </div>
+                        <div class="group-content">
+                            ${vids.map(video => {
+                                const displayPath = video.relativePath.replace(/\\\\/g, '/');
+                                const isFav = favoriteIds.has(video.id);
+                                return `
+                                    <div class="video-item">
+                                        <div class="video-info">
+                                            ${displayPath !== video.name ? `<div class="video-path">📂 ${displayPath}</div>` : ''}
+                                            <div class="video-name">${video.name} ${isFav ? '<span style="color:#ff6b6b">♥</span>' : ''}</div>
+                                            <div class="video-meta">大小: ${video.size} | 修改时间: ${video.modified}</div>
+                                        </div>
+                                        <a href="/player.html?id=${video.id}" class="watch-btn" target="_blank">播放</a>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            videoList.innerHTML = html;
+
+            // 生成快速导航滑块
+            renderQuickNav(dirNames);
+        }
+        
+        // 渲染快速导航滑块
+        function renderQuickNav(dirNames) {
+            const quickNav = document.getElementById('quickNav');
+            const tooltip = document.getElementById('quickNavTooltip');
+            
+            // 存储目录名称供拖动使用
+            window._quickNavDirNames = dirNames;
+            
+            if (dirNames.length <= 3) {
+                quickNav.style.display = 'none';
+                return;
+            }
+            
+            quickNav.style.display = 'flex';
+            quickNav.innerHTML = '';
+            
+            dirNames.forEach((dirName, index) => {
+                const item = document.createElement('div');
+                item.className = 'quick-nav-item';
+                
+                // 显示目录名首字符或简称
+                const shortName = dirName.length <= 2 ? dirName : dirName.substring(0, 2);
+                item.textContent = shortName;
+                item.title = dirName;
+                item.dataset.index = index;
+                item.dataset.dirName = dirName;
+                
+                // 点击跳转
+                item.addEventListener('click', () => {
+                    const dirId = 'dir-' + dirName.replace(/[^a-zA-Z0-9]/g, '_');
+                    const target = document.getElementById(dirId);
+                    if (target) {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        updateActiveNav(index);
+                    }
+                });
+                
+                quickNav.appendChild(item);
+            });
+            
+            // 设置拖动支持
+            setupQuickNavDrag(quickNav, tooltip, dirNames);
+            
+            // 滚动监听，更新当前高亮
+            setupScrollObserver();
+        }
+        
+        // 设置快速导航拖动
+        function setupQuickNavDrag(quickNav, tooltip, dirNames) {
+            let isDragging = false;
+            
+            const handleDrag = (e) => {
+                if (!isDragging) return;
+                
+                e.preventDefault();
+                
+                const rect = quickNav.getBoundingClientRect();
+                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                const relativeY = clientY - rect.top;
+                const percentage = Math.max(0, Math.min(1, relativeY / rect.height));
+                const index = Math.floor(percentage * dirNames.length);
+                const clampedIndex = Math.min(index, dirNames.length - 1);
+                
+                const dirName = dirNames[clampedIndex];
+                const dirId = 'dir-' + dirName.replace(/[^a-zA-Z0-9]/g, '_');
+                const target = document.getElementById(dirId);
+                
+                // 显示提示
+                tooltip.textContent = dirName;
+                tooltip.style.top = (rect.top + relativeY) + 'px';
+                tooltip.classList.add('show');
+                
+                // 滚动到目标
+                if (target) {
+                    target.scrollIntoView({ behavior: 'auto', block: 'start' });
+                    updateActiveNav(clampedIndex);
+                }
+            };
+            
+            const startDrag = (e) => {
+                isDragging = true;
+                document.body.style.userSelect = 'none';
+                handleDrag(e);
+            };
+            
+            const endDrag = () => {
+                isDragging = false;
+                document.body.style.userSelect = '';
+                tooltip.classList.remove('show');
+            };
+            
+            quickNav.addEventListener('mousedown', startDrag);
+            quickNav.addEventListener('touchstart', startDrag, { passive: false });
+            
+            document.addEventListener('mousemove', handleDrag);
+            document.addEventListener('touchmove', handleDrag, { passive: false });
+            
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchend', endDrag);
+        }
+        
+        // 更新导航高亮
+        function updateActiveNav(activeIndex) {
+            const items = document.querySelectorAll('.quick-nav-item');
+            items.forEach((item, i) => {
+                item.classList.toggle('active', i === activeIndex);
+            });
+        }
+        
+        // 设置滚动监听
+        function setupScrollObserver() {
+            const groups = document.querySelectorAll('.video-group');
+            const quickNav = document.getElementById('quickNav');
+            
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const dirName = entry.target.id.replace('dir-', '').replace(/_/g, ' ');
+                        const items = document.querySelectorAll('.quick-nav-item');
+                        items.forEach(item => {
+                            const itemDirId = 'dir-' + item.dataset.dirName.replace(/[^a-zA-Z0-9]/g, '_');
+                            item.classList.toggle('active', itemDirId === entry.target.id);
+                        });
+                    }
+                });
+            }, {
+                rootMargin: '-80px 0px -70% 0px',
+                threshold: 0
+            });
+            
+            groups.forEach(group => observer.observe(group));
+        }
+
+        // 加载视频列表
+        async function loadVideoList() {
+            const videoList = document.getElementById('videoList');
+            
+            try {
+                // 并行加载视频列表和收藏列表
+                const [videosRes, favRes] = await Promise.all([
+                    api('/api/videos'),
+                    api('/api/favorites')
+                ]);
+                
+                const data = await videosRes.json();
+                const favData = await favRes.json();
+                
+                allVideos = data.videos;
+                favorites = favData.favorites || [];
+                
+                // 更新统计
+                document.getElementById('videoCount').textContent = data.videoCount;
+                document.getElementById('dirCount').textContent = data.dirCount;
+                
+                renderVideoList(allVideos);
+                
+            } catch (err) {
+                videoList.innerHTML = `
+                    <div class="empty-state">
+                        <h3>加载失败</h3>
+                        <p>${err.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 刷新扫描
+        document.getElementById('refreshBtn').addEventListener('click', async function() {
+            this.disabled = true;
+            this.textContent = '扫描中...';
+            
+            try {
+                const response = await api('/api/scan', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadVideoList();
+                } else {
+                    alert('扫描失败: ' + result.error);
+                }
+            } catch (err) {
+                if (err.message !== '未登录') {
+                    alert('请求失败: ' + err.message);
+                }
+            } finally {
+                this.disabled = false;
+                this.textContent = '刷新扫描';
+            }
+        });
+
+        // 切换目录展开/收起
+        function toggleGroup(header) {
+            const content = header.nextElementSibling;
+            content.style.display = content.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // ==================== PIN码生成 ====================
+        let pinTimerInterval = null;
+        let pinExpiresAt = null;
+
+        // 生成PIN码按钮点击
+        document.getElementById('generatePinBtn').addEventListener('click', async () => {
+            try {
+                const response = await api('/api/pin/generate', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success) {
+                    showPinModal(result.pin, result.expiresAt);
+                } else {
+                    alert('生成PIN码失败: ' + result.error);
+                }
+            } catch (err) {
+                if (err.message !== '未登录') {
+                    alert('请求失败: ' + err.message);
+                }
+            }
+        });
+
+        // 显示PIN码弹窗
+        function showPinModal(pin, expiresAt) {
+            const modal = document.getElementById('pinModal');
+            const display = document.getElementById('pinCodeDisplay');
+            const timer = document.getElementById('pinTimer');
+
+            // 显示PIN码
+            display.innerHTML = pin.split('').map(d => `<div class="pin-digit">${d}</div>`).join('');
+
+            // 设置过期时间
+            pinExpiresAt = expiresAt;
+
+            // 清除旧的定时器
+            if (pinTimerInterval) {
+                clearInterval(pinTimerInterval);
+            }
+
+            // 更新倒计时
+            function updateTimer() {
+                const remaining = Math.max(0, pinExpiresAt - Date.now());
+                const minutes = Math.floor(remaining / 60000);
+                const seconds = Math.floor((remaining % 60000) / 1000);
+
+                timer.textContent = `有效期: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                timer.classList.toggle('warning', remaining < 60000);
+
+                if (remaining <= 0) {
+                    clearInterval(pinTimerInterval);
+                    timer.textContent = 'PIN码已过期';
+                    timer.classList.add('warning');
+                }
+            }
+
+            updateTimer();
+            pinTimerInterval = setInterval(updateTimer, 1000);
+
+            // 显示弹窗
+            modal.classList.add('show');
+        }
+
+        // 关闭PIN码弹窗
+        document.getElementById('pinModalClose').addEventListener('click', () => {
+            const modal = document.getElementById('pinModal');
+            modal.classList.remove('show');
+            if (pinTimerInterval) {
+                clearInterval(pinTimerInterval);
+                pinTimerInterval = null;
+            }
+        });
+
+        // 点击弹窗外部关闭
+        document.getElementById('pinModal').addEventListener('click', (e) => {
+            if (e.target.id === 'pinModal') {
+                document.getElementById('pinModalClose').click();
+            }
+        });
+
+        // 全局页面滚动条滑块
+        function initPageSlider() {
+            const pageSlider = document.getElementById('pageSlider');
+            const thumb = document.getElementById('pageSliderThumb');
+
+            let isDragging = false;
+
+            function updateThumb() {
+                const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+                const maxScroll = scrollHeight - clientHeight;
+
+                if (maxScroll <= 10) {
+                    pageSlider.style.display = 'none';
+                    return;
+                }
+
+                pageSlider.style.display = 'block';
+                const percentage = scrollTop / maxScroll;
+                const trackHeight = pageSlider.clientHeight;
+                const thumbHeight = Math.max(40, (clientHeight / scrollHeight) * trackHeight);
+                const maxThumbTop = trackHeight - thumbHeight;
+                const thumbTop = percentage * maxThumbTop;
+
+                thumb.style.height = thumbHeight + 'px';
+                thumb.style.top = thumbTop + 'px';
+            }
+
+            // 监听页面滚动
+            window.addEventListener('scroll', () => {
+                if (!isDragging) {
+                    updateThumb();
+                }
+            });
+
+            // 滑块拖动
+            thumb.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                thumb.classList.add('dragging');
+                pageSlider.classList.add('dragging');
+                document.body.style.userSelect = 'none';
+            });
+
+            // 点击轨道跳转
+            pageSlider.addEventListener('mousedown', (e) => {
+                if (e.target === pageSlider || e.target === thumb.parentElement) {
+                    const rect = pageSlider.getBoundingClientRect();
+                    const relativeY = e.clientY - rect.top;
+                    const percentage = relativeY / rect.height;
+                    const maxScroll = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                    window.scrollTo(0, percentage * maxScroll);
+                    updateThumb();
+                }
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+
+                const rect = pageSlider.getBoundingClientRect();
+                const relativeY = e.clientY - rect.top;
+                const percentage = Math.max(0, Math.min(1, relativeY / rect.height));
+                const maxScroll = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                window.scrollTo(0, percentage * maxScroll);
+                updateThumb();
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                thumb.classList.remove('dragging');
+                pageSlider.classList.remove('dragging');
+                document.body.style.userSelect = '';
+            });
+
+            // 触摸事件支持
+            thumb.addEventListener('touchstart', (e) => {
+                isDragging = true;
+                thumb.classList.add('dragging');
+                pageSlider.classList.add('dragging');
+            }, { passive: true });
+
+            pageSlider.addEventListener('touchstart', (e) => {
+                if (e.target === pageSlider || e.target === thumb.parentElement) {
+                    const rect = pageSlider.getBoundingClientRect();
+                    const touch = e.touches[0];
+                    const relativeY = touch.clientY - rect.top;
+                    const percentage = relativeY / rect.height;
+                    const maxScroll = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                    window.scrollTo(0, percentage * maxScroll);
+                    updateThumb();
+                }
+            }, { passive: true });
+
+            document.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+
+                const rect = pageSlider.getBoundingClientRect();
+                const touch = e.touches[0];
+                const relativeY = touch.clientY - rect.top;
+                const percentage = Math.max(0, Math.min(1, relativeY / rect.height));
+                const maxScroll = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                window.scrollTo(0, percentage * maxScroll);
+                updateThumb();
+            }, { passive: true });
+
+            document.addEventListener('touchend', () => {
+                isDragging = false;
+                thumb.classList.remove('dragging');
+                pageSlider.classList.remove('dragging');
+            });
+
+            // 窗口大小变化时更新
+            window.addEventListener('resize', updateThumb);
+
+            // 初始更新
+            updateThumb();
+        }
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 获取当前用户信息
+            try {
+                const userRes = await api('/api/user');
+                if (!userRes.ok) throw new Error('获取用户信息失败');
+                const userData = await userRes.json();
+                document.getElementById('userBadge').textContent = `👤 ${userData.username}`;
+            } catch (err) {
+                return;
+            }
+
+            // 加载视频列表
+            await loadVideoList();
+
+            // 初始化全局页面滚动条滑块
+            initPageSlider();
+
+            // 轮询扫描状态
+            pollScanStatus();
+        });
+    </script>
+</body>
+</html>

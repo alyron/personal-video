@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频播放 - 视频服务器</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .player-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        .download-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .download-btn:hover {
+            background-color: #45a049;
+        }
+        .favorite-btn {
+            background-color: #fff;
+            color: #666;
+            border: 1px solid #ddd;
+        }
+        .favorite-btn:hover {
+            border-color: #ff6b6b;
+            color: #ff6b6b;
+        }
+        .favorite-btn.active {
+            background-color: #ff6b6b;
+            color: white;
+            border-color: #ff6b6b;
+        }
+        .download-progress {
+            font-size: 12px;
+            color: #666;
+        }
+        .video-wrapper {
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        .video-wrapper video {
+            width: 100%;
+            display: block;
+            max-height: calc(100vh - 200px);
+        }
+        @media (max-width: 768px) {
+            .video-wrapper video {
+                max-height: calc(100vh - 160px);
+            }
+        }
+        .format-tip {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #856404;
+            display: none;
+            margin-bottom: 10px;
+        }
+        .sibling-videos {
+            margin-top: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .sibling-videos h3 {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .sibling-videos h3::before {
+            content: '📁';
+        }
+        .sibling-list {
+            display: grid;
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .sibling-item {
+            display: flex;
+            align-items: center;
+            background: white;
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+            transition: all 0.2s;
+        }
+        .sibling-item:hover {
+            border-color: #4CAF50;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .sibling-item .filename {
+            flex: 1;
+            font-size: 13px;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-left: 10px;
+        }
+        .sibling-item .play-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        .sibling-item .play-btn:hover {
+            background: #45a049;
+        }
+        .sibling-empty {
+            color: #999;
+            font-size: 13px;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="player-container">
+        <div class="player-header">
+            <div class="player-header-content">
+                <h1 class="video-title" id="videoTitle">加载中...</h1>
+            </div>
+        </div>
+
+        <div class="player-body">
+            <div class="format-tip" id="formatTip">
+                <strong>提示：</strong>当前视频格式可能在浏览器中播放受限。如果无法播放，建议下载后使用本地播放器观看。
+            </div>
+
+            <div class="video-wrapper">
+                <video id="videoPlayer" controls playsinline crossorigin>
+                    您的浏览器不支持视频播放
+                </video>
+            </div>
+
+            <div class="player-actions">
+                <button id="favoriteBtn" class="action-btn favorite-btn" style="display: none;">
+                    <span id="favoriteIcon">♡</span> <span id="favoriteText">收藏</span>
+                </button>
+                <button id="downloadBtn" class="action-btn download-btn" style="display: none;">
+                    <span>⬇</span> 下载视频
+                </button>
+                <span id="downloadProgress" class="download-progress"></span>
+            </div>
+
+            <div class="sibling-videos" id="siblingSection" style="display: none;">
+                <h3 id="siblingTitle">同目录视频</h3>
+                <div class="sibling-list" id="siblingList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentVideoId = null;
+        let currentFilename = null;
+        let currentDirName = null;
+        let currentContentType = null;
+        let isFavorite = false;
+
+        // 统一 API 请求处理
+        async function api(url, options = {}) {
+            const response = await fetch(url, {
+                ...options,
+                credentials: 'same-origin'
+            });
+
+            if (response.status === 401) {
+                window.location.href = '/login.html';
+                throw new Error('未登录');
+            }
+
+            return response;
+        }
+
+        // 检查收藏状态
+        async function checkFavorite() {
+            if (!currentVideoId) return;
+
+            try {
+                const response = await api(`/api/favorite/check/${currentVideoId}`);
+                const data = await response.json();
+                isFavorite = data.isFavorite;
+                updateFavoriteUI();
+            } catch (err) {
+                console.error('检查收藏状态失败:', err);
+            }
+        }
+
+        // 更新收藏按钮 UI
+        function updateFavoriteUI() {
+            const btn = document.getElementById('favoriteBtn');
+            const icon = document.getElementById('favoriteIcon');
+            const text = document.getElementById('favoriteText');
+
+            if (isFavorite) {
+                icon.textContent = '♥';
+                text.textContent = '已收藏';
+                btn.classList.add('active');
+            } else {
+                icon.textContent = '♡';
+                text.textContent = '收藏';
+                btn.classList.remove('active');
+            }
+        }
+
+        // 切换收藏状态
+        async function toggleFavorite() {
+            if (!currentVideoId) return;
+
+            const btn = document.getElementById('favoriteBtn');
+            btn.disabled = true;
+
+            try {
+                if (isFavorite) {
+                    const response = await api(`/api/favorite/${currentVideoId}`, {
+                        method: 'DELETE'
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        isFavorite = false;
+                        updateFavoriteUI();
+                    }
+                } else {
+                    const response = await api('/api/favorite', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            videoId: currentVideoId,
+                            dirName: currentDirName,
+                            filename: currentFilename
+                        })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        isFavorite = true;
+                        updateFavoriteUI();
+                    }
+                }
+            } catch (err) {
+                console.error('收藏操作失败:', err);
+                alert('操作失败，请重试');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // 下载视频
+        async function downloadVideo() {
+            if (!currentVideoId) return;
+
+            const progress = document.getElementById('downloadProgress');
+
+            try {
+                const checkRes = await fetch('/api/videos', { method: 'HEAD' });
+                if (checkRes.status === 401) {
+                    alert('登录已过期，请重新登录');
+                    window.location.href = '/login.html';
+                    return;
+                }
+
+                progress.textContent = '已开始下载，请查看浏览器下载管理器';
+
+                const downloadUrl = `/api/download/${currentVideoId}`;
+                let iframe = document.getElementById('downloadIframe');
+                if (!iframe) {
+                    iframe = document.createElement('iframe');
+                    iframe.id = 'downloadIframe';
+                    iframe.style.display = 'none';
+                    document.body.appendChild(iframe);
+                }
+                iframe.src = downloadUrl;
+
+                setTimeout(() => {
+                    progress.textContent = '';
+                }, 10000);
+            } catch (err) {
+                console.error('下载失败:', err);
+                progress.textContent = '下载失败，请重试';
+            }
+        }
+
+        // 加载同目录下的其他视频
+        async function loadSiblingVideos() {
+            if (!currentVideoId) return;
+
+            try {
+                const response = await api(`/api/sibling-videos?id=${currentVideoId}`);
+                if (!response.ok) return;
+
+                const data = await response.json();
+                const { videos, currentDir } = data;
+
+                const section = document.getElementById('siblingSection');
+                const list = document.getElementById('siblingList');
+                const title = document.getElementById('siblingTitle');
+
+                if (videos.length === 0) {
+                    section.style.display = 'none';
+                    return;
+                }
+
+                // 更新标题显示目录路径
+                title.textContent = `同目录视频 (${currentDir})`;
+
+                // 渲染视频列表
+                list.innerHTML = videos.map(video => `
+                    <div class="sibling-item">
+                        <a href="player.html?id=${video.id}" class="play-btn">▶</a>
+                        <span class="filename" title="${video.filename}">${video.filename}</span>
+                    </div>
+                `).join('');
+
+                section.style.display = 'block';
+            } catch (err) {
+                console.error('加载同目录视频失败:', err);
+            }
+        }
+
+        // 初始化播放器
+        function initPlayer(url) {
+            const video = document.getElementById('videoPlayer');
+            video.src = url;
+
+            // 对于 MKV/AVI 等格式，显示提示
+            const limitedFormats = ['video/x-matroska', 'video/x-msvideo'];
+            if (limitedFormats.includes(currentContentType)) {
+                document.getElementById('formatTip').style.display = 'block';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const videoId = urlParams.get('id');
+
+            const videoTitle = document.getElementById('videoTitle');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const favoriteBtn = document.getElementById('favoriteBtn');
+
+            if (!videoId) {
+                videoTitle.textContent = '视频ID无效';
+                return;
+            }
+
+            currentVideoId = videoId;
+            downloadBtn.style.display = 'inline-flex';
+            favoriteBtn.style.display = 'inline-flex';
+
+            downloadBtn.addEventListener('click', downloadVideo);
+            favoriteBtn.addEventListener('click', toggleFavorite);
+
+            try {
+                const response = await api(`/api/video-info?id=${videoId}`);
+
+                if (!response.ok) {
+                    throw new Error('获取视频信息失败');
+                }
+
+                const info = await response.json();
+
+                // 显示完整路径
+                videoTitle.textContent = info.relativePath;
+                currentFilename = info.filename;
+                currentDirName = info.dirName;
+                currentContentType = info.contentType;
+
+                // 初始化播放器
+                initPlayer(`/api/stream/${videoId}`);
+
+                // 检查收藏状态
+                await checkFavorite();
+
+                // 加载同目录下的其他视频
+                await loadSiblingVideos();
+
+            } catch (err) {
+                console.error('加载视频信息失败:', err);
+                videoTitle.textContent = '加载失败';
+            }
+        });
+    </script>
+</body>
+</html>

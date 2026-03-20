@@ -1,0 +1,667 @@
+// Package handler HTTP处理器
+package handler
+
+import (
+	"encoding/json"
+	"net/http"
+	"path/filepath"
+
+	"github.com/gorilla/mux"
+
+	"video-server/internal/config"
+	"video-server/internal/middleware"
+	"video-server/internal/model"
+	"video-server/internal/service"
+	"video-server/internal/utils"
+)
+
+// Handler HTTP处理器
+type Handler struct {
+	authMiddleware  *middleware.AuthMiddleware
+	sessionManager  *model.SessionManager
+	videoCache      *model.VideoCache
+	videoScanner    *service.VideoScanner
+	videoStream     *service.VideoStreamService
+	favoriteManager *model.FavoriteManager
+	qrCodeManager   *model.QRCodeManager
+	pinCodeManager  *model.PINCodeManager
+}
+
+// NewHandler 创建处理器
+func NewHandler() *Handler {
+	return &Handler{
+		authMiddleware:  middleware.NewAuthMiddleware(),
+		sessionManager:  model.GetSessionManager(),
+		videoCache:      model.GetVideoCache(),
+		videoScanner:    service.GetVideoScanner(),
+		videoStream:     service.GetVideoStreamService(),
+		favoriteManager: model.GetFavoriteManager(),
+		qrCodeManager:   model.GetQRCodeManager(),
+		pinCodeManager:  model.GetPINCodeManager(),
+	}
+}
+
+// SetupRoutes 设置路由
+func (h *Handler) SetupRoutes(r *mux.Router) {
+	// 认证相关
+	r.HandleFunc("/login", h.loginPage).Methods("GET")
+	r.HandleFunc("/api/login", h.loginAPI).Methods("POST")
+	r.HandleFunc("/api/user", h.userAPI).Methods("GET")
+	r.HandleFunc("/api/logout", h.logoutAPI).Methods("GET")
+	
+	// 二维码登录
+	r.HandleFunc("/api/qrcode/create", h.qrcodeCreate).Methods("POST")
+	r.HandleFunc("/api/qrcode/status/{token}", h.qrcodeStatus).Methods("GET")
+	r.HandleFunc("/api/qrcode/scan/{token}", h.qrcodeScan).Methods("GET")
+	r.HandleFunc("/api/qrcode/confirm", h.qrcodeConfirm).Methods("POST")
+	r.HandleFunc("/api/qrcode/cancel", h.qrcodeCancel).Methods("POST")
+	r.HandleFunc("/qr-confirm/{token}", h.qrConfirmPage).Methods("GET")
+	
+	// PIN码登录
+	r.HandleFunc("/api/pin/generate", h.pinGenerate).Methods("POST")
+	r.HandleFunc("/api/pin/login", h.pinLogin).Methods("POST")
+	r.HandleFunc("/api/pin/status/{pin}", h.pinStatus).Methods("GET")
+	
+	// 需要认证的API
+	apiAuth := r.PathPrefix("/api").Subrouter()
+	apiAuth.Use(h.authMiddleware.RequireAuth)
+	
+	apiAuth.HandleFunc("/videos", h.getVideos).Methods("GET")
+	apiAuth.HandleFunc("/scan", h.scanVideos).Methods("POST")
+	apiAuth.HandleFunc("/scan-status", h.scanStatus).Methods("GET")
+	apiAuth.HandleFunc("/video-info", h.videoInfo).Methods("GET")
+	apiAuth.HandleFunc("/stream/{videoId}", h.streamVideo).Methods("GET")
+	apiAuth.HandleFunc("/download/{videoId}", h.downloadVideo).Methods("GET")
+	apiAuth.HandleFunc("/favorites", h.getFavorites).Methods("GET")
+	apiAuth.HandleFunc("/favorite", h.addFavorite).Methods("POST")
+	apiAuth.HandleFunc("/favorite/{videoId}", h.removeFavorite).Methods("DELETE")
+	apiAuth.HandleFunc("/favorite/check/{videoId}", h.checkFavorite).Methods("GET")
+	apiAuth.HandleFunc("/sibling-videos", h.siblingVideos).Methods("GET")
+	
+	// 主页
+	r.Handle("/", h.authMiddleware.RequireAuth(http.HandlerFunc(h.homePage))).Methods("GET")
+	
+	// 静态文件（最后处理，避免覆盖其他路由）
+	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./public")))
+}
+
+// ==================== 页面处理 ====================
+
+func (h *Handler) loginPage(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/login.html", http.StatusFound)
+}
+
+func (h *Handler) homePage(w http.ResponseWriter, r *http.Request) {
+	// 如果缓存为空，启动后台扫描
+	if len(h.videoCache.GetVideos()) == 0 && !h.videoCache.IsScanning() {
+		go h.videoScanner.ScanAllDirectories()
+	}
+	http.Redirect(w, r, "/index.html", http.StatusFound)
+}
+
+func (h *Handler) qrConfirmPage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	token := vars["token"]
+	http.Redirect(w, r, "/qr-confirm.html?token="+token, http.StatusFound)
+}
+
+// ==================== 认证API ====================
+
+func (h *Handler) loginAPI(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"success":false,"error":"无效请求"}`, http.StatusBadRequest)
+		return
+	}
+	
+	cfg := config.GetConfig()
+	
+	// 验证用户
+	var validUser bool
+	for _, user := range cfg.Users {
+		if user.Username == req.Username && user.Password == req.Password {
+			validUser = true
+			break
+		}
+	}
+	
+	if !validUser {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, `{"success":false,"error":"用户名或密码错误"}`, http.StatusUnauthorized)
+		return
+	}
+	
+	// 创建会话
+	sessionID, _ := h.sessionManager.CreateSession(req.Username)
+	
+	// 设置Cookie (7天有效期)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "sessionId",
+		Value:    sessionID,
+		Path:     "/",
+		MaxAge:   7 * 24 * 60 * 60,
+		HttpOnly: true,
+		Secure:   cfg.HTTPS.Enabled,
+		SameSite: http.SameSiteStrictMode,
+	})
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"username": req.Username,
+	})
+}
+
+func (h *Handler) userAPI(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("sessionId")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, `{"error":"未登录"}`, http.StatusUnauthorized)
+		return
+	}
+	
+	session := h.sessionManager.GetSession(cookie.Value)
+	if session == nil {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, `{"error":"未登录"}`, http.StatusUnauthorized)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"username": session.Username,
+	})
+}
+
+func (h *Handler) logoutAPI(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("sessionId")
+	if err == nil {
+		h.sessionManager.DeleteSession(cookie.Value)
+	}
+	
+	http.SetCookie(w, &http.Cookie{
+		Name:   "sessionId",
+		Value:  "",
+		Path:   "/",
+		MaxAge: -1,
+	})
+	
+	http.Redirect(w, r, "/login.html", http.StatusFound)
+}
+
+// ==================== 二维码登录API ====================
+
+func (h *Handler) qrcodeCreate(w http.ResponseWriter, r *http.Request) {
+	token, expiresAt := h.qrCodeManager.CreateQRSession()
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":   true,
+		"token":     token,
+		"expiresAt": expiresAt,
+	})
+}
+
+func (h *Handler) qrcodeStatus(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	token := vars["token"]
+	
+	qrSession := h.qrCodeManager.GetQRSession(token)
+	
+	if qrSession == nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"status":  "invalid",
+		})
+		return
+	}
+	
+	response := map[string]interface{}{
+		"success": true,
+		"status":  qrSession.Status,
+	}
+	
+	if qrSession.Status == model.QRStatusConfirmed && qrSession.SessionID != "" {
+		response["sessionId"] = qrSession.SessionID
+		response["username"] = qrSession.Username
+		h.qrCodeManager.DeleteQRSession(token)
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *Handler) qrcodeScan(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	token := vars["token"]
+	
+	qrSession := h.qrCodeManager.GetQRSession(token)
+	
+	if qrSession == nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "二维码无效或已过期",
+		})
+		return
+	}
+	
+	if qrSession.Status == model.QRStatusExpired {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "二维码已过期",
+		})
+		return
+	}
+	
+	if qrSession.Status != model.QRStatusPending {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "二维码已被使用",
+		})
+		return
+	}
+	
+	h.qrCodeManager.MarkScanned(token)
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"token":   token,
+	})
+}
+
+func (h *Handler) qrcodeConfirm(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token    string `json:"token"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"success":false,"error":"无效请求"}`, http.StatusBadRequest)
+		return
+	}
+	
+	cfg := config.GetConfig()
+	
+	// 验证二维码状态
+	qrSession := h.qrCodeManager.GetQRSession(req.Token)
+	if qrSession == nil || qrSession.Status != model.QRStatusScanned {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, `{"success":false,"error":"二维码无效或已过期"}`, http.StatusBadRequest)
+		return
+	}
+	
+	// 验证用户
+	var validUser bool
+	for _, user := range cfg.Users {
+		if user.Username == req.Username && user.Password == req.Password {
+			validUser = true
+			break
+		}
+	}
+	
+	if !validUser {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, `{"success":false,"error":"用户名或密码错误"}`, http.StatusUnauthorized)
+		return
+	}
+	
+	// 创建会话
+	sessionID, _ := h.sessionManager.CreateSession(req.Username)
+	
+	// 确认登录
+	h.qrCodeManager.ConfirmLogin(req.Token, sessionID, req.Username)
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"username": req.Username,
+	})
+}
+
+func (h *Handler) qrcodeCancel(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"success":false,"error":"无效请求"}`, http.StatusBadRequest)
+		return
+	}
+	
+	h.qrCodeManager.CancelLogin(req.Token)
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// ==================== PIN码登录API ====================
+
+func (h *Handler) pinGenerate(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("sessionId")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, `{"success":false,"error":"未登录"}`, http.StatusUnauthorized)
+		return
+	}
+	
+	session := h.sessionManager.GetSession(cookie.Value)
+	if session == nil {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, `{"success":false,"error":"未登录"}`, http.StatusUnauthorized)
+		return
+	}
+	
+	pin, expiresAt := h.pinCodeManager.CreatePINSession(session.Username)
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":   true,
+		"pin":       pin,
+		"expiresAt": expiresAt,
+	})
+}
+
+func (h *Handler) pinLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PIN string `json:"pin"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"success":false,"error":"无效请求"}`, http.StatusBadRequest)
+		return
+	}
+	
+	if req.PIN == "" || !isNumeric(req.PIN) || len(req.PIN) != 4 {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, `{"success":false,"error":"请输入4位数字PIN码"}`, http.StatusBadRequest)
+		return
+	}
+	
+	result := h.pinCodeManager.UsePINCode(req.PIN)
+	if result == nil {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, `{"success":false,"error":"PIN码无效或已过期"}`, http.StatusUnauthorized)
+		return
+	}
+	
+	// 创建会话
+	newSessionID, _ := h.sessionManager.CreateSession(*result)
+	
+	// 删除已使用的PIN码会话
+	h.pinCodeManager.DeletePINSession(req.PIN)
+	
+	cfg := config.GetConfig()
+	
+	// 设置Cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "sessionId",
+		Value:    newSessionID,
+		Path:     "/",
+		MaxAge:   7 * 24 * 60 * 60,
+		HttpOnly: true,
+		Secure:   cfg.HTTPS.Enabled,
+		SameSite: http.SameSiteStrictMode,
+	})
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"username": *result,
+	})
+}
+
+func (h *Handler) pinStatus(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	pin := vars["pin"]
+	
+	pinSession := h.pinCodeManager.GetPINSession(pin)
+	
+	if pinSession == nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"status":  "invalid",
+		})
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"status":   pinSession.Status,
+		"username": pinSession.Username,
+	})
+}
+
+// ==================== 视频API ====================
+
+func (h *Handler) getVideos(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value("username").(string)
+	
+	allVideos := h.videoCache.GetVideos()
+	videos := utils.FilterVideosByPermission(allVideos, username)
+	
+	// 添加ID
+	videosWithID := make([]map[string]interface{}, len(videos))
+	for i, video := range videos {
+		videoID := utils.GetVideoIDManager().GetVideoID(video.DirName, video.RelativePath)
+		videosWithID[i] = map[string]interface{}{
+			"name":         video.Name,
+			"relativePath": video.RelativePath,
+			"fullPath":     video.FullPath,
+			"dirName":      video.DirName,
+			"size":         video.Size,
+			"sizeBytes":    video.SizeBytes,
+			"modified":     video.Modified,
+			"modifiedTime": video.ModifiedTime,
+			"id":           videoID,
+		}
+	}
+	
+	// 统计目录数
+	dirSet := make(map[string]bool)
+	for _, v := range videos {
+		dirSet[v.DirName] = true
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"videos":     videosWithID,
+		"videoCount": len(videos),
+		"dirCount":   len(dirSet),
+	})
+}
+
+func (h *Handler) scanVideos(w http.ResponseWriter, r *http.Request) {
+	videos, err := h.videoScanner.ScanAllDirectories()
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, `{"success":false,"error":"扫描失败"}`, http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"count":   len(videos),
+	})
+}
+
+func (h *Handler) scanStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(h.videoCache.GetStatus())
+}
+
+func (h *Handler) videoInfo(w http.ResponseWriter, r *http.Request) {
+	videoID := r.URL.Query().Get("id")
+	username := r.Context().Value("username").(string)
+	
+	if videoID == "" {
+		http.Error(w, `{"error":"缺少 id 参数"}`, http.StatusBadRequest)
+		return
+	}
+	
+	info := h.videoStream.GetVideoInfo(videoID)
+	if info == nil {
+		http.Error(w, `{"error":"视频不存在或已过期"}`, http.StatusNotFound)
+		return
+	}
+	
+	// 权限验证
+	if !utils.HasAccess(username, info["dirName"].(string)) {
+		http.Error(w, `{"error":"无权访问该视频"}`, http.StatusForbidden)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(info)
+}
+
+func (h *Handler) streamVideo(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	videoID := vars["videoId"]
+	username := r.Context().Value("username").(string)
+	
+	h.videoStream.StreamVideo(w, r, videoID, username)
+}
+
+func (h *Handler) downloadVideo(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	videoID := vars["videoId"]
+	username := r.Context().Value("username").(string)
+	
+	h.videoStream.DownloadVideo(w, videoID, username)
+}
+
+// ==================== 收藏API ====================
+
+func (h *Handler) getFavorites(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value("username").(string)
+	favorites := h.favoriteManager.GetFavorites(username)
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"favorites": favorites,
+	})
+}
+
+func (h *Handler) addFavorite(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value("username").(string)
+	
+	var req struct {
+		VideoID  string `json:"videoId"`
+		DirName  string `json:"dirName"`
+		Filename string `json:"filename"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"无效请求"}`, http.StatusBadRequest)
+		return
+	}
+	
+	if req.VideoID == "" {
+		http.Error(w, `{"error":"缺少 videoId"}`, http.StatusBadRequest)
+		return
+	}
+	
+	success := h.favoriteManager.AddFavorite(username, model.Favorite{
+		VideoID:  req.VideoID,
+		DirName:  req.DirName,
+		Filename: req.Filename,
+	})
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": success})
+}
+
+func (h *Handler) removeFavorite(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	videoID := vars["videoId"]
+	username := r.Context().Value("username").(string)
+	
+	success := h.favoriteManager.RemoveFavorite(username, videoID)
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": success})
+}
+
+func (h *Handler) checkFavorite(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value("username").(string)
+	vars := mux.Vars(r)
+	videoID := vars["videoId"]
+	
+	isFav := h.favoriteManager.IsFavorite(username, videoID)
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"isFavorite": isFav})
+}
+
+func (h *Handler) siblingVideos(w http.ResponseWriter, r *http.Request) {
+	videoID := r.URL.Query().Get("id")
+	username := r.Context().Value("username").(string)
+	
+	if videoID == "" {
+		http.Error(w, `{"error":"缺少 id 参数"}`, http.StatusBadRequest)
+		return
+	}
+	
+	currentVideoInfo := utils.GetVideoIDManager().GetVideoByID(videoID)
+	if currentVideoInfo == nil {
+		http.Error(w, `{"error":"视频不存在"}`, http.StatusNotFound)
+		return
+	}
+	
+	// 权限验证
+	if !utils.HasAccess(username, currentVideoInfo.DirName) {
+		http.Error(w, `{"error":"无权访问"}`, http.StatusForbidden)
+		return
+	}
+	
+	// 获取当前视频所在目录
+	currentDir := filepath.Dir(currentVideoInfo.RelativePath)
+	currentFilename := filepath.Base(currentVideoInfo.RelativePath)
+	
+	// 从缓存中获取同目录下的其他视频
+	allVideos := h.videoCache.GetVideos()
+	var siblingVideos []map[string]interface{}
+	
+	for _, video := range allVideos {
+		videoDir := filepath.Dir(video.RelativePath)
+		if video.DirName == currentVideoInfo.DirName && 
+		   videoDir == currentDir && 
+		   filepath.Base(video.RelativePath) != currentFilename {
+			siblingVideos = append(siblingVideos, map[string]interface{}{
+				"id":           utils.GetVideoIDManager().GetVideoID(video.DirName, video.RelativePath),
+				"filename":     filepath.Base(video.RelativePath),
+				"relativePath": video.RelativePath,
+			})
+		}
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"videos":     siblingVideos,
+		"currentDir": currentDir,
+	})
+}
+
+// ==================== 工具函数 ====================
+
+func isNumeric(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}

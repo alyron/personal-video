@@ -1,0 +1,940 @@
+/* ===== 基础样式 ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: #f5f5f5;
+    min-height: 100vh;
+}
+
+/* ===== 登录页面 ===== */
+.login-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.login-container {
+    background: white;
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    width: 100%;
+    max-width: 400px;
+}
+
+.login-container h1 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: #333;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #555;
+    font-weight: 500;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 16px;
+    transition: border-color 0.3s;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.error-message {
+    color: #e74c3c;
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+.login-btn {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.login-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+}
+
+/* ===== 登录页面标签切换 ===== */
+.login-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #eee;
+}
+
+.login-tab {
+    flex: 1;
+    padding: 10px;
+    background: none;
+    border: none;
+    font-size: 14px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+}
+
+.login-tab.active {
+    color: #667eea;
+    font-weight: 500;
+}
+
+.login-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.login-form {
+    display: none;
+}
+
+.login-form.active {
+    display: block;
+}
+
+/* ===== 扫码登录 ===== */
+.qrcode-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 0;
+}
+
+.qrcode-box {
+    width: 200px;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f9f9f9;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.qrcode-box canvas,
+.qrcode-box img {
+    border-radius: 4px;
+}
+
+.qrcode-status {
+    text-align: center;
+    color: #666;
+    font-size: 14px;
+}
+
+.qrcode-status .success-text {
+    color: #4CAF50;
+    font-weight: 500;
+}
+
+.qrcode-status .error-text {
+    color: #e74c3c;
+}
+
+.refresh-qrcode {
+    margin-top: 15px;
+    background: #6c757d;
+}
+
+.refresh-qrcode:hover {
+    background: #5a6268;
+}
+
+/* ===== 扫码确认页面 ===== */
+.qr-confirm-container {
+    max-width: 360px;
+}
+
+.qr-status-area {
+    text-align: center;
+    padding: 20px 0;
+}
+
+.qr-status-area p {
+    margin-top: 15px;
+    color: #666;
+}
+
+.confirm-hint {
+    text-align: center;
+    color: #666;
+    margin-bottom: 20px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.confirm-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.confirm-btn {
+    flex: 2;
+}
+
+.cancel-btn {
+    flex: 1;
+    background: #6c757d;
+}
+
+.cancel-btn:hover {
+    background: #5a6268;
+}
+
+.success-icon, .error-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    margin: 0 auto;
+}
+
+.success-icon {
+    background: #4CAF50;
+    color: white;
+}
+
+.error-icon {
+    background: #e74c3c;
+    color: white;
+}
+
+.success-text {
+    color: #4CAF50 !important;
+    font-weight: 500;
+    font-size: 16px;
+}
+
+.error-text {
+    color: #e74c3c !important;
+}
+
+.hint-text {
+    color: #999 !important;
+    font-size: 13px !important;
+}
+
+/* ===== 头部导航 ===== */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: white;
+    padding: 15px 30px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-title {
+    font-size: 20px;
+    color: #333;
+}
+
+.header-info {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.user-badge {
+    background-color: #667eea;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+}
+
+.refresh-btn, .logout-btn, .pin-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+    transition: background-color 0.3s;
+}
+
+.refresh-btn {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.refresh-btn:hover {
+    background-color: #45a049;
+}
+
+.refresh-btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+.pin-btn {
+    background-color: #667eea;
+    color: white;
+}
+
+.pin-btn:hover {
+    background-color: #5a6fd8;
+}
+
+.logout-btn {
+    background-color: #f44336;
+    color: white;
+}
+
+.logout-btn:hover {
+    background-color: #da190b;
+}
+
+/* ===== 主内容区 ===== */
+.main-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.stats-bar {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.stat-item {
+    background: white;
+    padding: 15px 25px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stat-number {
+    font-size: 28px;
+    font-weight: bold;
+    color: #667eea;
+}
+
+.stat-label {
+    font-size: 14px;
+    color: #666;
+}
+
+/* ===== 视频列表 ===== */
+.video-list-wrapper {
+    position: relative;
+    display: flex;
+}
+
+.video-list {
+    flex: 1;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+/* 全局页面滚动条滑块 */
+.page-slider {
+    position: fixed;
+    right: 10px;
+    top: 80px;
+    bottom: 20px;
+    width: 30px;
+    background: transparent;
+    cursor: pointer;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    /* 防止触摸时选中文本 */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+body:hover .page-slider,
+.page-slider.dragging {
+    opacity: 1;
+}
+
+/* 移动端始终显示 */
+@media (max-width: 768px) {
+    .page-slider {
+        opacity: 0.6;
+        right: 5px;
+    }
+}
+
+.page-slider-track {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+}
+
+.page-slider-thumb {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    min-height: 40px;
+    background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+    border-radius: 4px;
+    cursor: grab;
+    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+}
+
+.page-slider-thumb.dragging {
+    cursor: grabbing;
+    transform: translateX(-50%) scaleX(1.3);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .page-slider {
+        width: 20px;
+    }
+}
+
+/* 快速导航滑块 */
+.quick-nav {
+    position: sticky;
+    top: 80px;
+    width: 32px;
+    height: calc(100vh - 100px);
+    max-height: 600px;
+    margin-left: 10px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 50;
+}
+
+.quick-nav::-webkit-scrollbar {
+    width: 0;
+}
+
+.quick-nav-item {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #666;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    text-decoration: none;
+}
+
+.quick-nav-item:hover {
+    background-color: #667eea;
+    color: white;
+}
+
+.quick-nav-item.active {
+    background-color: #667eea;
+    color: white;
+}
+
+.quick-nav-handle {
+    position: absolute;
+    right: 42px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 100px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 4px;
+    cursor: grab;
+    opacity: 0.8;
+    transition: opacity 0.2s, width 0.2s;
+}
+
+.quick-nav-handle:hover {
+    opacity: 1;
+    width: 12px;
+}
+
+.quick-nav-handle:active {
+    cursor: grabbing;
+}
+
+.quick-nav-tooltip {
+    position: fixed;
+    right: 60px;
+    background: #333;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+    z-index: 1000;
+}
+
+.quick-nav-tooltip.show {
+    opacity: 1;
+}
+
+.video-group {
+    margin-bottom: 20px;
+}
+
+.video-group:last-child {
+    margin-bottom: 0;
+}
+
+.group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    user-select: none;
+}
+
+.group-header:hover {
+    background-color: #f0f0f0;
+}
+
+.group-name {
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+}
+
+.group-count {
+    background-color: #667eea;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+}
+
+.video-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+    transition: background-color 0.3s;
+}
+
+.video-item:last-child {
+    border-bottom: none;
+}
+
+.video-item:hover {
+    background-color: #f9f9f9;
+}
+
+.video-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.video-path {
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 3px;
+    font-family: 'Courier New', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.video-name {
+    font-size: 16px;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.video-meta {
+    font-size: 13px;
+    color: #666;
+}
+
+.watch-btn {
+    padding: 8px 20px;
+    background-color: #2196F3;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    transition: background-color 0.3s;
+}
+
+.watch-btn:hover {
+    background-color: #0b7dda;
+}
+
+/* ===== 播放器页面 ===== */
+.player-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 15px;
+}
+
+.player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.player-header-content {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.video-title {
+    font-size: 16px;
+    color: #333;
+    margin: 0;
+    word-break: break-all;
+    font-family: 'Courier New', monospace;
+}
+
+.player-body {
+    margin-top: 15px;
+}
+
+.video-wrapper {
+    background-color: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    max-height: calc(100vh - 200px);
+}
+
+.video-wrapper video {
+    max-width: 100%;
+    max-height: calc(100vh - 200px);
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+    display: block;
+    outline: none;
+}
+
+.player-actions {
+    margin-top: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* ===== 加载状态 ===== */
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ===== 空状态 ===== */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+}
+
+.empty-state h3 {
+    margin-bottom: 10px;
+    color: #333;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        gap: 10px;
+        padding: 15px;
+    }
+
+    .header-info {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .stats-bar {
+        flex-direction: column;
+    }
+
+    .video-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .watch-btn {
+        width: 100%;
+        text-align: center;
+    }
+
+    /* 播放器页面移动端适配 */
+    .player-container {
+        padding: 10px;
+    }
+
+    .player-header {
+        padding: 10px 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .player-header-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .video-title {
+        font-size: 14px;
+        line-height: 1.3;
+    }
+
+    .video-wrapper {
+        max-height: calc(100vh - 160px);
+    }
+
+    .video-wrapper video {
+        max-height: calc(100vh - 160px);
+    }
+
+    .player-actions {
+        gap: 8px;
+    }
+
+    /* PIN码登录移动端适配 */
+    .login-tabs {
+        flex-wrap: wrap;
+    }
+
+    .login-tab {
+        font-size: 13px;
+        padding: 8px;
+    }
+
+    .pin-input {
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
+    }
+}
+
+/* ===== PIN码登录 ===== */
+.pin-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 0;
+}
+
+.pin-icon {
+    color: #667eea;
+    margin-bottom: 15px;
+}
+
+.pin-description {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.pin-input-group {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.pin-input {
+    width: 56px;
+    height: 56px;
+    text-align: center;
+    font-size: 28px;
+    font-weight: bold;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    outline: none;
+    transition: all 0.3s;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+}
+
+.pin-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.pin-input::-webkit-outer-spin-button,
+.pin-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* ===== 生成PIN码弹窗 ===== */
+.pin-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s;
+}
+
+.pin-modal.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.pin-modal-content {
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    text-align: center;
+    max-width: 320px;
+    width: 90%;
+    transform: scale(0.9);
+    transition: transform 0.3s;
+}
+
+.pin-modal.show .pin-modal-content {
+    transform: scale(1);
+}
+
+.pin-modal-title {
+    font-size: 18px;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.pin-modal-hint {
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 20px;
+}
+
+.pin-code-display {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 15px;
+}
+
+.pin-digit {
+    width: 48px;
+    height: 56px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-size: 32px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+}
+
+.pin-timer {
+    font-size: 14px;
+    color: #999;
+    margin-bottom: 15px;
+}
+
+.pin-timer.warning {
+    color: #e74c3c;
+}
+
+.pin-modal-close {
+    padding: 10px 30px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.pin-modal-close:hover {
+    background: #5a6268;
+}
