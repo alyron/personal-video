@@ -99,52 +99,72 @@ router.get('/download/:videoId', requireAuth, (req, res) => {
 /**
  * 获取收藏列表
  */
-router.get('/favorites', requireAuth, (req, res) => {
-  const username = req.session.username;
-  const favorites = favoriteManager.getFavorites(username);
-  res.json({ favorites });
+router.get('/favorites', requireAuth, async (req, res) => {
+  try {
+    const username = req.session.username;
+    const favorites = await favoriteManager.getFavorites(username);
+    res.json({ favorites });
+  } catch (err) {
+    console.error('获取收藏失败:', err);
+    res.status(500).json({ error: '获取收藏失败' });
+  }
 });
 
 /**
  * 添加收藏
  */
-router.post('/favorite', requireAuth, (req, res) => {
-  const username = req.session.username;
-  const { videoId, dirName, filename } = req.body;
-  
-  if (!videoId) {
-    return res.status(400).json({ error: '缺少 videoId' });
+router.post('/favorite', requireAuth, async (req, res) => {
+  try {
+    const username = req.session.username;
+    const { videoId, dirName, filename } = req.body;
+    
+    if (!videoId) {
+      return res.status(400).json({ error: '缺少 videoId' });
+    }
+    
+    const success = await favoriteManager.addFavorite(username, { 
+      videoId, 
+      dirName, 
+      filename 
+    });
+    
+    res.json({ success });
+  } catch (err) {
+    console.error('添加收藏失败:', err);
+    res.status(500).json({ error: '添加收藏失败' });
   }
-  
-  const success = favoriteManager.addFavorite(username, { 
-    videoId, 
-    dirName, 
-    filename 
-  });
-  
-  res.json({ success });
 });
 
 /**
  * 取消收藏
  */
-router.delete('/favorite/:videoId', requireAuth, (req, res) => {
-  const username = req.session.username;
-  const { videoId } = req.params;
-  
-  const success = favoriteManager.removeFavorite(username, videoId);
-  res.json({ success });
+router.delete('/favorite/:videoId', requireAuth, async (req, res) => {
+  try {
+    const username = req.session.username;
+    const { videoId } = req.params;
+    
+    const success = await favoriteManager.removeFavorite(username, videoId);
+    res.json({ success });
+  } catch (err) {
+    console.error('取消收藏失败:', err);
+    res.status(500).json({ error: '取消收藏失败' });
+  }
 });
 
 /**
  * 检查是否已收藏
  */
-router.get('/favorite/check/:videoId', requireAuth, (req, res) => {
-  const username = req.session.username;
-  const { videoId } = req.params;
-  
-  const isFav = favoriteManager.isFavorite(username, videoId);
-  res.json({ isFavorite: isFav });
+router.get('/favorite/check/:videoId', requireAuth, async (req, res) => {
+  try {
+    const username = req.session.username;
+    const { videoId } = req.params;
+    
+    const isFav = await favoriteManager.isFavorite(username, videoId);
+    res.json({ isFavorite: isFav });
+  } catch (err) {
+    console.error('检查收藏失败:', err);
+    res.status(500).json({ error: '检查收藏失败' });
+  }
 });
 
 /**

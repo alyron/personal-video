@@ -1,7 +1,7 @@
 /**
- * 会话管理模块 - 支持持久化存储
+ * 会话管理模块 - 异步 I/O 版本
  */
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 
@@ -11,93 +11,92 @@ const SESSIONS_FILE = path.join(__dirname, '../../data/sessions.json');
 // 会话有效期 (7天)
 const SESSION_EXPIRY = 7 * 24 * 60 * 60 * 1000;
 
-// 会话存储 (sessionId -> 用户信息)
-let sessions = new Map();
+// 内存缓存
+let sessionsCache = null;
+let cacheTime = 0;
+const CACHE_TTL = 5000; // 5秒缓存
 
-// 确保数据目录存在
-function ensureDataDir() {
+/**
+ * 确保数据目录存在
+ */
+async function ensureDataDir() {
   const dataDir = path.dirname(SESSIONS_FILE);
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
+  await fs.mkdir(dataDir, { recursive: true }).catch(err => {
+    if (err.code !== 'EEXIST') throw err;
+  });
 }
 
-// 从文件加载会话
-function loadSessions() {
-  ensureDataDir();
-  
-  if (!fs.existsSync(SESSIONS_FILE)) {
-    return;
+/**
+ * 读取所有会话（带缓存）
+ */
+async function readSessions() {
+  // 缓存命中
+  if (sessionsCache !== null && (Date.now() - cacheTime) < CACHE_TTL) {
+    return sessionsCache;
   }
   
   try {
-    const data = fs.readFileSync(SESSIONS_FILE, 'utf8');
-    const sessionsObj = JSON.parse(data);
-    
-    // 过滤过期会话
-    const now = Date.now();
-    for (const [id, session] of Object.entries(sessionsObj)) {
-      if (session.expiresAt > now) {
-        sessions.set(id, session);
-      }
+    const data = await fs.readFile(SESSIONS_FILE, 'utf8');
+    sessionsCache = JSON.parse(data);
+    cacheTime = Date.now();
+    return sessionsCache;
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      sessionsCache = {};
+      cacheTime = Date.now();
+      return sessionsCache;
     }
-    
-    console.log(`已恢复 ${sessions.size} 个会话`);
-  } catch (err) {
-    console.error('加载会话数据失败:', err);
+    throw err;
   }
 }
 
-// 保存会话到文件
-function saveSessions() {
-  ensureDataDir();
-  
-  const sessionsObj = {};
-  for (const [id, session] of sessions.entries()) {
-    sessionsObj[id] = session;
-  }
-  
-  try {
-    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessionsObj, null, 2), 'utf8');
-  } catch (err) {
-    console.error('保存会话数据失败:', err);
-  }
+/**
+ * 保存所有会话
+ */
+async function writeSessions(sessions) {
+  await ensureDataDir();
+  await fs.writeFile(SESSIONS_FILE, JSON.stringify(sessions, null, 2), 'utf8');
+  // 更新缓存
+  sessionsCache = sessions;
+  cacheTime = Date.now();
 }
 
 /**
  * 创建会话
  * @param {string} username 用户名
- * @returns {string} 会话ID
+ * @returns {Promise<string>} 会话ID
  */
-function createSession(username) {
+async function createSession(username) {
+  const sessions = await readSessions();
   const sessionId = crypto.randomBytes(32).toString('hex');
-  const session = {
+  
+  sessions[sessionId] = {
     username,
     createdAt: Date.now(),
     expiresAt: Date.now() + SESSION_EXPIRY
   };
   
-  sessions.set(sessionId, session);
-  saveSessions();
-  
+  await writeSessions(sessions);
   return sessionId;
 }
 
 /**
  * 获取会话
  * @param {string} sessionId 会话ID
- * @returns {object|null} 会话信息
+ * @returns {Promise<object|null>} 会话信息
  */
-function getSession(sessionId) {
+async function getSession(sessionId) {
   if (!sessionId) return null;
   
-  const session = sessions.get(sessionId);
+  const sessions = await readSessions();
+  const session = sessions[sessionId];
+  
   if (!session) return null;
   
   // 检查是否过期
   if (Date.now() > session.expiresAt) {
-    sessions.delete(sessionId);
-    saveSessions();
+    delete sessions[sessionId];
+    await writeSessions(sessions);
     return null;
   }
   
@@ -108,33 +107,42 @@ function getSession(sessionId) {
  * 删除会话
  * @param {string} sessionId 会话ID
  */
-function deleteSession(sessionId) {
-  sessions.delete(sessionId);
-  saveSessions();
+async function deleteSession(sessionId) {
+  const sessions = await readSessions();
+  if (sessions[sessionId]) {
+    delete sessions[sessionId];
+    await writeSessions(sessions);
+  }
 }
 
 /**
  * 清理过期会话
  */
-function cleanExpiredSessions() {
+async function cleanExpiredSessions() {
+  const sessions = await readSessions();
   const now = Date.now();
   let changed = false;
   
-  for (const [id, session] of sessions.entries()) {
+  for (const [id, session] of Object.entries(sessions)) {
     if (now > session.expiresAt) {
-      sessions.delete(id);
+      delete sessions[id];
       changed = true;
     }
   }
   
   if (changed) {
-    saveSessions();
+    await writeSessions(sessions);
     console.log('已清理过期会话');
   }
 }
 
-// 初始化时加载会话
-loadSessions();
+/**
+ * 清除缓存
+ */
+function clearCache() {
+  sessionsCache = null;
+  cacheTime = 0;
+}
 
 // 每小时清理过期会话
 setInterval(cleanExpiredSessions, 60 * 60 * 1000);
@@ -143,5 +151,6 @@ module.exports = {
   createSession,
   getSession,
   deleteSession,
-  cleanExpiredSessions
+  cleanExpiredSessions,
+  clearCache
 };

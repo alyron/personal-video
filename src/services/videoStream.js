@@ -1,7 +1,8 @@
 /**
- * 视频流服务
+ * 视频流服务 - 优化版：使用异步 I/O
  */
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const config = require('../config');
 const videoIdManager = require('../utils/videoId');
@@ -15,6 +16,10 @@ const CONTENT_TYPE_MAP = {
   '.mov': 'video/quicktime',
   '.webm': 'video/webm'
 };
+
+// 文件状态缓存（避免频繁 stat）
+const statCache = new Map();
+const STAT_CACHE_TTL = 30000; // 30秒缓存
 
 /**
  * 调试日志输出
@@ -49,10 +54,6 @@ function getVideoPath(videoId) {
   const videoDir = path.resolve(dirConfig.path);
   const filePath = path.join(videoDir, relativePath);
   
-  if (!fs.existsSync(filePath)) {
-    return null;
-  }
-  
   const filename = path.basename(relativePath);
   const ext = path.extname(filename).toLowerCase();
   const contentType = CONTENT_TYPE_MAP[ext] || 'video/mp4';
@@ -85,13 +86,53 @@ function getVideoInfo(videoId) {
 }
 
 /**
- * 流式传输视频
+ * 异步获取文件状态（带缓存）
+ * @param {string} filePath 文件路径
+ * @returns {Promise<object|null>} 文件状态
+ */
+async function getFileStat(filePath) {
+  const cached = statCache.get(filePath);
+  if (cached && Date.now() - cached.time < STAT_CACHE_TTL) {
+    return cached.stat;
+  }
+  
+  try {
+    const stat = await fsPromises.stat(filePath);
+    statCache.set(filePath, { stat, time: Date.now() });
+    return stat;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * 同步获取文件状态（带缓存）
+ * @param {string} filePath 文件路径
+ * @returns {object|null} 文件状态
+ */
+function getFileStatSync(filePath) {
+  const cached = statCache.get(filePath);
+  if (cached && Date.now() - cached.time < STAT_CACHE_TTL) {
+    return cached.stat;
+  }
+  
+  try {
+    const stat = fs.statSync(filePath);
+    statCache.set(filePath, { stat, time: Date.now() });
+    return stat;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * 流式传输视频（异步版本）
  * @param {object} req Express请求对象
  * @param {object} res Express响应对象
  * @param {string} videoId 视频ID
  * @param {string} username 用户名（用于权限验证）
  */
-function streamVideo(req, res, videoId, username) {
+async function streamVideoAsync(req, res, videoId, username) {
   const videoInfo = videoIdManager.getVideoById(videoId);
   if (!videoInfo) {
     return res.status(404).json({ error: '视频不存在或已过期' });
@@ -108,7 +149,12 @@ function streamVideo(req, res, videoId, username) {
   }
   
   const { filePath, contentType } = pathInfo;
-  const stat = fs.statSync(filePath);
+  const stat = await getFileStat(filePath);
+  
+  if (!stat) {
+    return res.status(404).json({ error: '视频文件不存在' });
+  }
+  
   const fileSize = stat.size;
   const range = req.headers.range;
   
@@ -171,6 +217,18 @@ function streamVideo(req, res, videoId, username) {
 }
 
 /**
+ * 流式传输视频（兼容同步接口）
+ */
+function streamVideo(req, res, videoId, username) {
+  streamVideoAsync(req, res, videoId, username).catch(err => {
+    console.error('视频流处理失败:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: '视频流处理失败' });
+    }
+  });
+}
+
+/**
  * 下载视频
  * @param {object} res Express响应对象
  * @param {string} videoId 视频ID
@@ -193,7 +251,12 @@ function downloadVideo(res, videoId, username) {
   }
   
   const { filePath, filename, contentType } = pathInfo;
-  const stat = fs.statSync(filePath);
+  const stat = getFileStatSync(filePath);
+  
+  if (!stat) {
+    return res.status(404).json({ error: '视频文件不存在' });
+  }
+  
   const fileSize = stat.size;
   
   debugLog(`Download: ${filename} (${fileSize} bytes)`);
@@ -217,9 +280,17 @@ function downloadVideo(res, videoId, username) {
   });
 }
 
+/**
+ * 清理状态缓存
+ */
+function clearStatCache() {
+  statCache.clear();
+}
+
 module.exports = {
   getVideoPath,
   getVideoInfo,
   streamVideo,
-  downloadVideo
+  downloadVideo,
+  clearStatCache
 };

@@ -1,7 +1,7 @@
 {
   "name": "video-server",
-  "version": "1.0.0",
-  "description": "A simple video server with authentication and IPv6 support",
+  "version": "1.1.0",
+  "description": "A video server with authentication, IPv6 support and async I/O",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

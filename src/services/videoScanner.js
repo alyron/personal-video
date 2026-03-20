@@ -12,8 +12,6 @@ const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.mov', '.webm'];
 
 /**
  * 格式化文件大小
- * @param {number} bytes 字节数
- * @returns {string} 格式化后的大小
  */
 function formatFileSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
@@ -24,8 +22,6 @@ function formatFileSize(bytes) {
 
 /**
  * 格式化日期
- * @param {Date} date 日期对象
- * @returns {string} 格式化后的日期
  */
 function formatDate(date) {
   return date.toLocaleString('zh-CN', {
@@ -39,21 +35,19 @@ function formatDate(date) {
 
 /**
  * 异步递归扫描目录
- * @param {string} dirPath 目录路径
- * @param {string} dirName 目录名称
- * @param {string} dirConfigPath 配置中的路径
- * @returns {Promise<Array>} 视频列表
  */
 async function scanDirectoryRecursively(dirPath, dirName, dirConfigPath) {
   const videos = [];
   const visitedDirs = new Set();
   
   async function scan(currentPath, relativePath = '') {
-    // 检测循环引用
-    const realPath = fs.realpathSync(currentPath);
-    if (visitedDirs.has(realPath)) {
-      return;
+    let realPath;
+    try {
+      realPath = await fs.promises.realpath(currentPath);
+    } catch (err) {
+      return; // 无法解析路径，跳过
     }
+    if (visitedDirs.has(realPath)) return;
     visitedDirs.add(realPath);
     
     let items;
@@ -65,7 +59,6 @@ async function scanDirectoryRecursively(dirPath, dirName, dirConfigPath) {
     }
     
     for (const item of items) {
-      // 跳过隐藏文件
       if (item.startsWith('.')) continue;
       
       const itemPath = path.join(currentPath, item);
@@ -83,7 +76,6 @@ async function scanDirectoryRecursively(dirPath, dirName, dirConfigPath) {
       } else if (stat.isFile()) {
         const ext = path.extname(item).toLowerCase();
         if (VIDEO_EXTENSIONS.includes(ext)) {
-          const pathFromRoot = path.relative(path.resolve(dirConfigPath), itemPath);
           videos.push({
             name: item,
             relativePath: relativeItemPath,
@@ -105,64 +97,73 @@ async function scanDirectoryRecursively(dirPath, dirName, dirConfigPath) {
 
 /**
  * 扫描所有配置的目录
- * @returns {Promise<Array>} 视频列表
  */
 async function scanAllDirectories() {
+  // 检查是否已在扫描（通过文件锁）
   if (videoCache.isScanning()) {
     console.log('扫描已在进行中...');
     return videoCache.getVideos();
   }
   
-  videoCache.setScanning(true);
-  videoCache.setVideos([]);
+  // 设置扫描锁
+  await videoCache.setScanning(true);
   
   console.log('开始异步扫描视频目录...');
   
   const cfg = config.getConfig();
+  const allVideos = [];
   
-  for (const dirConfig of cfg.videoDirs) {
-    const videoDir = path.resolve(dirConfig.path);
-    
-    if (!fs.existsSync(videoDir)) {
-      console.warn(`警告: 目录不存在 - ${videoDir}`);
-      continue;
-    }
-    
-    try {
-      const dirStat = await fs.promises.stat(videoDir);
-      if (!dirStat.isDirectory()) {
-        console.warn(`警告: 路径不是目录 - ${videoDir}`);
+  try {
+    for (const dirConfig of cfg.videoDirs) {
+      const videoDir = path.resolve(dirConfig.path);
+      
+      let exists;
+      try {
+        await fs.promises.access(videoDir);
+        exists = true;
+      } catch {
+        exists = false;
+      }
+      
+      if (!exists) {
+        console.warn(`警告: 目录不存在 - ${videoDir}`);
         continue;
       }
       
-      console.log(`正在扫描目录: ${dirConfig.name}...`);
-      const videos = await scanDirectoryRecursively(videoDir, dirConfig.name, dirConfig.path);
-      videoCache.setVideos([...videoCache.getVideos(), ...videos]);
-      console.log(`✓ 扫描完成 ${dirConfig.name}: ${videos.length} 个视频`);
-    } catch (err) {
-      console.error(`错误: 扫描目录失败 ${dirConfig.path}: ${err.message}`);
+      try {
+        const dirStat = await fs.promises.stat(videoDir);
+        if (!dirStat.isDirectory()) {
+          console.warn(`警告: 路径不是目录 - ${videoDir}`);
+          continue;
+        }
+        
+        console.log(`正在扫描目录: ${dirConfig.name}...`);
+        const videos = await scanDirectoryRecursively(videoDir, dirConfig.name, dirConfig.path);
+        allVideos.push(...videos);
+        console.log(`✓ 扫描完成 ${dirConfig.name}: ${videos.length} 个视频`);
+      } catch (err) {
+        console.error(`错误: 扫描目录失败 ${dirConfig.path}: ${err.message}`);
+      }
     }
+    
+    // 按名称排序
+    allVideos.sort((a, b) => a.name.localeCompare(b.name));
+    
+    // 一次性写入缓存文件
+    await videoCache.setVideos(allVideos);
+    
+    // 注册所有视频ID
+    videoIdManager.registerVideos(allVideos);
+    
+    console.log(`=================================================`);
+    console.log(`扫描完成！总计找到 ${allVideos.length} 个视频文件`);
+    console.log(`=================================================`);
+    
+    return allVideos;
+  } finally {
+    // 无论成功失败，都释放扫描锁
+    await videoCache.setScanning(false);
   }
-  
-  // 按名称排序
-  videoCache.setVideos(
-    videoCache.getVideos().sort((a, b) => a.name.localeCompare(b.name))
-  );
-  
-  videoCache.setScanning(false);
-  videoCache.updateLastScanTime();
-  
-  // 注册所有视频ID（用于反向查找）
-  videoIdManager.registerVideos(videoCache.getVideos());
-  
-  // 保存缓存到文件
-  videoCache.saveCache();
-  
-  console.log(`=================================================`);
-  console.log(`扫描完成！总计找到 ${videoCache.getVideos().length} 个视频文件`);
-  console.log(`=================================================`);
-  
-  return videoCache.getVideos();
 }
 
 module.exports = {
