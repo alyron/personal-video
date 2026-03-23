@@ -107,10 +107,15 @@
             border-radius: 6px;
             border: 1px solid #e0e0e0;
             transition: all 0.2s;
+            cursor: pointer;
         }
         .sibling-item:hover {
             border-color: #4CAF50;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .sibling-item.current {
+            border-color: #667eea;
+            background: #f0f4ff;
         }
         .sibling-item .filename {
             flex: 1;
@@ -137,14 +142,35 @@
             transition: background 0.2s;
             flex-shrink: 0;
         }
-        .sibling-item .play-btn:hover {
+        .sibling-item:hover .play-btn {
             background: #45a049;
+        }
+        .sibling-item.current .play-btn {
+            background: #667eea;
         }
         .sibling-empty {
             color: #999;
             font-size: 13px;
             text-align: center;
             padding: 20px;
+        }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+            z-index: 10;
+            display: none;
+        }
+        .video-wrapper {
+            position: relative;
         }
     </style>
 </head>
@@ -162,6 +188,7 @@
             </div>
 
             <div class="video-wrapper">
+                <div class="loading-overlay" id="loadingOverlay">加载中...</div>
                 <video id="videoPlayer" controls playsinline crossorigin>
                     您的浏览器不支持视频播放
                 </video>
@@ -336,17 +363,88 @@
                 // 更新标题显示目录路径
                 title.textContent = `同目录视频 (${currentDir})`;
 
-                // 渲染视频列表
+                // 渲染视频列表 - 使用 data-video-id 而不是链接
                 list.innerHTML = videos.map(video => `
-                    <div class="sibling-item">
-                        <a href="player.html?id=${video.id}" class="play-btn">▶</a>
+                    <div class="sibling-item ${video.id === currentVideoId ? 'current' : ''}" data-video-id="${video.id}">
+                        <div class="play-btn">▶</div>
                         <span class="filename" title="${video.filename}">${video.filename}</span>
                     </div>
                 `).join('');
 
+                // 绑定点击事件
+                list.querySelectorAll('.sibling-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const videoId = item.dataset.videoId;
+                        if (videoId && videoId !== currentVideoId) {
+                            switchVideo(videoId);
+                        }
+                    });
+                });
+
                 section.style.display = 'block';
             } catch (err) {
                 console.error('加载同目录视频失败:', err);
+            }
+        }
+
+        // 切换视频（不刷新页面）
+        async function switchVideo(videoId) {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const videoPlayer = document.getElementById('videoPlayer');
+
+            // 保存当前播放位置（如果需要可以恢复）
+            // const currentTime = videoPlayer.currentTime;
+
+            // 显示加载状态
+            loadingOverlay.style.display = 'flex';
+
+            try {
+                const response = await api(`/api/video-info?id=${videoId}`);
+
+                if (!response.ok) {
+                    throw new Error('获取视频信息失败');
+                }
+
+                const info = await response.json();
+
+                // 更新当前视频信息
+                currentVideoId = videoId;
+                currentFilename = info.filename;
+                currentDirName = info.dirName;
+                currentContentType = info.contentType;
+
+                // 更新页面标题
+                document.getElementById('videoTitle').textContent = info.relativePath;
+                document.title = `${info.filename} - 视频播放`;
+
+                // 更新 URL（不刷新页面）
+                const newUrl = new URL(window.location);
+                newUrl.searchParams.set('id', videoId);
+                window.history.pushState({ videoId }, '', newUrl);
+
+                // 更新视频源
+                videoPlayer.src = `/api/stream/${videoId}`;
+                videoPlayer.load();
+
+                // 对于 MKV/AVI 等格式，显示提示
+                const limitedFormats = ['video/x-matroska', 'video/x-msvideo'];
+                document.getElementById('formatTip').style.display =
+                    limitedFormats.includes(currentContentType) ? 'block' : 'none';
+
+                // 检查收藏状态
+                await checkFavorite();
+
+                // 重新加载同目录视频列表
+                await loadSiblingVideos();
+
+                // 自动播放
+                videoPlayer.play().catch(() => {});
+
+            } catch (err) {
+                console.error('切换视频失败:', err);
+                alert('加载视频失败');
+            } finally {
+                loadingOverlay.style.display = 'none';
             }
         }
 
@@ -361,6 +459,13 @@
                 document.getElementById('formatTip').style.display = 'block';
             }
         }
+
+        // 处理浏览器前进/后退
+        window.addEventListener('popstate', (event) => {
+            if (event.state && event.state.videoId) {
+                switchVideo(event.state.videoId);
+            }
+        });
 
         document.addEventListener('DOMContentLoaded', async () => {
             const urlParams = new URLSearchParams(window.location.search);
@@ -393,9 +498,13 @@
 
                 // 显示完整路径
                 videoTitle.textContent = info.relativePath;
+                document.title = `${info.filename} - 视频播放`;
                 currentFilename = info.filename;
                 currentDirName = info.dirName;
                 currentContentType = info.contentType;
+
+                // 保存初始状态到 history
+                window.history.replaceState({ videoId }, '', window.location.href);
 
                 // 初始化播放器
                 initPlayer(`/api/stream/${videoId}`);
