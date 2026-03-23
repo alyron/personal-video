@@ -95,15 +95,30 @@
         }
         .sibling-list {
             display: grid;
-            gap: 8px;
-            max-height: 300px;
+            gap: 6px;
+            max-height: 60vh;
             overflow-y: auto;
+            padding-right: 8px;
+        }
+        .sibling-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sibling-list::-webkit-scrollbar-track {
+            background: #e0e0e0;
+            border-radius: 3px;
+        }
+        .sibling-list::-webkit-scrollbar-thumb {
+            background: #aaa;
+            border-radius: 3px;
+        }
+        .sibling-list::-webkit-scrollbar-thumb:hover {
+            background: #888;
         }
         .sibling-item {
             display: flex;
             align-items: center;
             background: white;
-            padding: 10px 12px;
+            padding: 8px 12px;
             border-radius: 6px;
             border: 1px solid #e0e0e0;
             transition: all 0.2s;
@@ -130,14 +145,14 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
             background: #4CAF50;
             color: white;
             border: none;
             border-radius: 50%;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 12px;
             text-decoration: none;
             transition: background 0.2s;
             flex-shrink: 0;
