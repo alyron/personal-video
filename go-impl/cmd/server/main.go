@@ -35,7 +35,7 @@ func main() {
 	cacheLoaded := videoCache.LoadCache()
 
 	if cacheLoaded && len(videoCache.GetVideos()) > 0 {
-		// 缓存存在，注册视频ID
+		// 缓存存在，注册视频ID到管理器
 		utils.GetVideoIDManager().RegisterVideos(videoCache.GetVideos())
 	}
 

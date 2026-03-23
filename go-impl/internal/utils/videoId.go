@@ -36,16 +36,7 @@ func GenerateVideoID(dirName, relativePath string) string {
 
 // GetVideoID 获取或创建视频ID
 func (vim *VideoIDManager) GetVideoID(dirName, relativePath string) string {
-	videoID := GenerateVideoID(dirName, relativePath)
-
-	if _, ok := vim.idMap.Load(videoID); !ok {
-		vim.idMap.Store(videoID, &model.Video{
-			DirName:      dirName,
-			RelativePath: relativePath,
-		})
-	}
-
-	return videoID
+	return GenerateVideoID(dirName, relativePath)
 }
 
 // GetVideoByID 通过ID获取视频信息
@@ -56,11 +47,15 @@ func (vim *VideoIDManager) GetVideoByID(videoID string) *model.Video {
 	return nil
 }
 
-// RegisterVideos 批量注册视频
+// RegisterVideos 批量注册视频（扫描或加载缓存时调用）
 func (vim *VideoIDManager) RegisterVideos(videos []model.Video) {
-	for _, video := range videos {
-		videoID := GenerateVideoID(video.DirName, video.RelativePath)
-		v := video
+	for i := range videos {
+		videoID := videos[i].ID
+		if videoID == "" {
+			videoID = GenerateVideoID(videos[i].DirName, videos[i].RelativePath)
+			videos[i].ID = videoID
+		}
+		v := videos[i]
 		vim.idMap.Store(videoID, &v)
 	}
 }

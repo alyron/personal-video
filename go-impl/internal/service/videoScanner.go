@@ -186,12 +186,12 @@ func (vs *VideoScanner) ScanAllDirectories() ([]model.Video, error) {
 	sort.Slice(allVideos, func(i, j int) bool {
 		return allVideos[i].Name < allVideos[j].Name
 	})
-	
+
+	// 注册视频ID（会设置 video.ID）
+	utils.GetVideoIDManager().RegisterVideos(allVideos)
+
 	// 保存到缓存
 	vs.cache.SetVideos(allVideos)
-	
-	// 注册视频ID
-	utils.GetVideoIDManager().RegisterVideos(allVideos)
 	
 	fmt.Println("=================================================")
 	fmt.Printf("扫描完成！总计找到 %d 个视频文件\n", len(allVideos))

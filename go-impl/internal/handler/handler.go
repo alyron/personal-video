@@ -493,36 +493,19 @@ func (h *Handler) pinStatus(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) getVideos(w http.ResponseWriter, r *http.Request) {
 	username := r.Context().Value("username").(string)
-	
+
 	allVideos := h.videoCache.GetVideos()
 	videos := utils.FilterVideosByPermission(allVideos, username)
-	
-	// 添加ID
-	videosWithID := make([]map[string]interface{}, len(videos))
-	for i, video := range videos {
-		videoID := utils.GetVideoIDManager().GetVideoID(video.DirName, video.RelativePath)
-		videosWithID[i] = map[string]interface{}{
-			"name":         video.Name,
-			"relativePath": video.RelativePath,
-			"fullPath":     video.FullPath,
-			"dirName":      video.DirName,
-			"size":         video.Size,
-			"sizeBytes":    video.SizeBytes,
-			"modified":     video.Modified,
-			"modifiedTime": video.ModifiedTime,
-			"id":           videoID,
-		}
-	}
-	
-	// 统计目录数
-	dirSet := make(map[string]bool)
+
+	// 统计目录数（同时构建响应）
+	dirSet := make(map[string]bool, 8)
 	for _, v := range videos {
 		dirSet[v.DirName] = true
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"videos":     videosWithID,
+		"videos":     videos, // 直接使用，ID已在扫描时预计算
 		"videoCount": len(videos),
 		"dirCount":   len(dirSet),
 	})

@@ -1,6 +1,9 @@
+// Package model 数据模型
 package model
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -19,6 +22,7 @@ type Video struct {
 	SizeBytes    int64  `json:"sizeBytes"`
 	Modified     string `json:"modified"`
 	ModifiedTime int64  `json:"modifiedTime"`
+	ID           string `json:"id"` // 预计算的ID
 }
 
 // CacheData 缓存数据
@@ -33,6 +37,9 @@ type VideoCache struct {
 	lockPath   string
 	data       atomic.Pointer[CacheData]
 	isScanning atomic.Bool
+
+	// 预序列化的JSON缓存
+	jsonCache atomic.Pointer[[]byte]
 }
 
 var (
@@ -67,10 +74,23 @@ func (vc *VideoCache) LoadCache() bool {
 	}
 
 	if len(data.Videos) > 0 {
+		// 为每个视频计算ID
+		for i := range data.Videos {
+			if data.Videos[i].ID == "" {
+				data.Videos[i].ID = GenerateVideoID(data.Videos[i].DirName, data.Videos[i].RelativePath)
+			}
+		}
 		vc.data.Store(&data)
 		return true
 	}
 	return false
+}
+
+// GenerateVideoID 生成视频ID
+func GenerateVideoID(dirName, relativePath string) string {
+	data := dirName + ":" + relativePath
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:])[:16]
 }
 
 // GetVideos 获取视频列表
@@ -90,6 +110,9 @@ func (vc *VideoCache) SetVideos(videos []Video) {
 	}
 	vc.data.Store(data)
 
+	// 清除JSON缓存
+	vc.jsonCache.Store(nil)
+
 	// 异步保存
 	go func() {
 		os.MkdirAll(filepath.Dir(vc.filePath), 0755)
@@ -104,7 +127,6 @@ func (vc *VideoCache) IsScanning() bool {
 		return false
 	}
 
-	// 检查锁文件是否超时
 	data, err := os.ReadFile(vc.lockPath)
 	if err != nil {
 		vc.isScanning.Store(false)
@@ -119,7 +141,6 @@ func (vc *VideoCache) IsScanning() bool {
 		return false
 	}
 
-	// 10分钟超时
 	if time.Now().UnixMilli()-lockData.LockedAt > 10*60*1000 {
 		os.Remove(vc.lockPath)
 		vc.isScanning.Store(false)
